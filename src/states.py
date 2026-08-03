@@ -2,9 +2,10 @@
 import pygame as pg
 import random
 import math
-from sprites import Player, Enemy, Laser, Boss, PowerUp
+from sprites import Player, Enemy, Laser, Boss, PowerUp, Missile
 from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
+from level_system import LevelSystem
 
 class State:
     """
@@ -106,7 +107,7 @@ class MenuState(State):
 
         # Draw controller instruction banner at the bottom
         controls_text = self.game.assets.hud_font.render(
-            "WASD / Arrows to Move   |   SPACE to Shoot   |   ESC to Pause", True, (80, 100, 120)
+            "WASD / Arrows to Move   |   SPACE to Shoot   |   M for Missile   |   ESC to Pause", True, (80, 100, 120)
         )
         controls_rect = controls_text.get_rect(center=(self.game.width // 2, self.game.height - 40))
         screen.blit(controls_text, controls_rect)
@@ -114,10 +115,11 @@ class MenuState(State):
 
 class PlayState(State):
     """
-    The primary gameplay state.
+    The primary gameplay state — Sprint 2 level-system version.
     
-    Manages the player, active enemy waves, power-ups, particles, collisions,
-    screen shaking, and heads-up display (HUD).
+    Manages the player, LevelSystem-driven enemy waves, power-ups (including
+    new Sprint 2 types), homing missiles, particles, collisions,
+    screen shaking, and the heads-up display (HUD).
     """
     def __init__(self, game):
         super().__init__(game)
@@ -131,13 +133,14 @@ class PlayState(State):
         self.canvas = pg.Surface((self.game.width, self.game.height))
         
         # Pygame sprite groups for clean collision and batch updating
-        self.all_sprites = pg.sprite.Group()
-        self.player_group = pg.sprite.GroupSingle()
-        self.enemies = pg.sprite.Group()
+        self.all_sprites   = pg.sprite.Group()
+        self.player_group  = pg.sprite.GroupSingle()
+        self.enemies       = pg.sprite.Group()
         self.player_lasers = pg.sprite.Group()
-        self.enemy_lasers = pg.sprite.Group()
-        self.powerups = pg.sprite.Group()
-        self.particles = pg.sprite.Group()
+        self.enemy_lasers  = pg.sprite.Group()
+        self.powerups      = pg.sprite.Group()
+        self.particles     = pg.sprite.Group()
+        self.missiles      = pg.sprite.Group()   # Sprint 2: homing missiles group
         
         # Initialize Player in the center-bottom of the viewport
         self.player = Player(self.game, self.game.width // 2, self.game.height - 100)
@@ -147,24 +150,24 @@ class PlayState(State):
         # Game stats
         self.score = 0
         
-        # Wave management
-        self.wave = 1
-        self.wave_intro_timer = 2.5 # Display "WAVE X" banner on screen for 2.5 seconds
-        self.wave_enemies_to_spawn = 6
-        self.wave_spawned_count = 0
-        self.spawn_timer = 0.0
-        self.spawn_delay = 1.6      # Time in seconds between enemy spawns
-        self.boss_active = False
+        # Sprint 2: LevelSystem drives all wave/level progression
+        self.level_sys = LevelSystem()
+        
+        # Intro banner timing (shows "LEVEL X - WAVE Y" or "BOSS INCOMING")
+        self.wave_intro_timer = 2.5
+        
+        # Boss tracking
+        self.boss_active   = False
         self.boss_instance = None
         
         # Screen shake status
-        self.shake_duration = 0.0
+        self.shake_duration  = 0.0
         self.shake_magnitude = 0
-        self.shake_offset = pg.Vector2(0, 0)
+        self.shake_offset    = pg.Vector2(0, 0)
 
     def trigger_shake(self, duration, magnitude):
         """Enables screen shake with a specific duration and strength."""
-        self.shake_duration = duration
+        self.shake_duration  = duration
         self.shake_magnitude = magnitude
 
     def handle_events(self, events):
@@ -188,66 +191,50 @@ class PlayState(State):
         # 2. BACKGROUND ANIMATION
         self.starfield.update(dt)
         
-        # 3. ENEMY SPAWNING ALGORITHM
+        # 3. ENEMY SPAWNING via LevelSystem
         if self.wave_intro_timer > 0:
             # Freeze enemy spawning while the wave intro text is showing
             self.wave_intro_timer -= dt
-        else:
-            # Wave 5 is the final Boss wave
-            if self.wave == 5:
-                if not self.boss_active and self.wave_spawned_count == 0:
-                    self.boss_instance = Boss(self.game)
-                    self.enemies.add(self.boss_instance)
-                    self.all_sprites.add(self.boss_instance)
-                    self.boss_active = True
-                    self.wave_spawned_count = 1
-            else:
-                # Spawn regular waves of enemies
-                if self.wave_spawned_count < self.wave_enemies_to_spawn:
-                    self.spawn_timer -= dt
-                    if self.spawn_timer <= 0:
-                        self.spawn_timer = self.spawn_delay
-                        
-                        # Build enemy pool: scouts are standard, stingers spawn on Wave 2+, cruisers on Wave 3+
-                        etypes = ["scout"]
-                        if self.wave >= 2:
-                            etypes.append("stinger")
-                        if self.wave >= 3:
-                            etypes.append("cruiser")
-                            
-                        # Balance type spawning probabilities based on current wave level
-                        if self.wave == 2:
-                            weights = [0.7, 0.3]
-                        elif self.wave >= 3:
-                            weights = [0.5, 0.35, 0.15]
-                        else:
-                            weights = [1.0] # 100% scouts on Wave 1
-                            
-                        etype = random.choices(etypes, weights=weights)[0]
-                        # Instantiate enemy at random X position offscreen-top (-40 y)
-                        enemy = Enemy(self.game, random.randint(60, self.game.width - 60), -40, enemy_type=etype)
-                        self.enemies.add(enemy)
-                        self.all_sprites.add(enemy)
-                        self.wave_spawned_count += 1
-                else:
-                    # Wave finished spawning, wait until all enemies are destroyed to trigger next wave
-                    if len(self.enemies) == 0:
-                        self.wave += 1
-                        self.wave_intro_timer = 2.5
-                        self.wave_spawned_count = 0
-                        self.wave_enemies_to_spawn = 6 + self.wave * 4
-                        # Dynamically speed up spawn rates in higher waves
-                        self.spawn_delay = max(0.4, 1.6 - self.wave * 0.15)
-                        self.boss_active = False
+        elif not self.level_sys.complete:
+            # Ask LevelSystem what to spawn this frame
+            spawn_type = self.level_sys.tick_spawn(dt)
             
-            # Special check for Boss stage defeat
-            if self.boss_active and len(self.enemies) == 0:
-                self.wave += 1
+            if spawn_type == "boss":
+                # Spawn the Boss with level-scaled multipliers
+                cfg = self.level_sys.current_wave_cfg
+                self.boss_instance = Boss(
+                    self.game,
+                    hp_mult=cfg["hp_mult"],
+                    spd_mult=cfg["spd_mult"],
+                )
+                self.enemies.add(self.boss_instance)
+                self.all_sprites.add(self.boss_instance)
+                self.boss_active = True
+
+            elif spawn_type is not None:
+                # Regular enemy spawn with level multipliers
+                cfg = self.level_sys.current_wave_cfg
+                enemy = Enemy(
+                    self.game,
+                    random.randint(60, self.game.width - 60),
+                    -40,
+                    enemy_type=spawn_type,
+                    hp_mult=cfg["hp_mult"],
+                    spd_mult=cfg["spd_mult"],
+                )
+                self.enemies.add(enemy)
+                self.all_sprites.add(enemy)
+
+            # Check if wave/level is done (all spawned + all killed)
+            if self.level_sys.wave_finished_spawning() and len(self.enemies) == 0:
+                result = self.level_sys.advance_wave()
                 self.wave_intro_timer = 2.5
-                self.wave_spawned_count = 0
-                self.wave_enemies_to_spawn = 12
-                self.spawn_delay = 1.0
                 self.boss_active = False
+                
+                if result == "complete":
+                    # All 10 levels beaten — show victory screen
+                    self.game.change_state(GameCompleteState(self.game, self.score))
+                    return
 
         # 4. SPRITE & PARTICLE PHYSICS
         self.all_sprites.update(dt)
@@ -267,22 +254,32 @@ class PlayState(State):
         for enemy, lasers in hits.items():
             for laser in lasers:
                 # Spawn glowing blue sparks shooting upwards from impact point
-                spawn_sparks(self.particles, laser.rect.centerx, laser.rect.top, (0, -1), color=(0, 255, 255), count=6)
+                spark_color = (255, 80, 0) if laser.damage > 10 else (0, 255, 255)
+                spawn_sparks(self.particles, laser.rect.centerx, laser.rect.top, (0, -1), color=spark_color, count=6)
                 
-                # Apply laser damage. get_hit returns True if enemy dies
-                if enemy.get_hit(10):
+                # Apply laser damage (power laser = 20, normal = 10). get_hit returns True if enemy dies
+                if enemy.get_hit(laser.damage):
                     self.score += enemy.score_value
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
                     
-                    # 15% probability to spawn a power-up drop
-                    if random.random() < 0.15:
-                        ptype = random.choices(["shield", "triple", "speed"], weights=[0.4, 0.3, 0.3])[0]
-                        pup = PowerUp(self.game, enemy.rect.centerx, enemy.rect.centery, ptype)
-                        self.powerups.add(pup)
-                        self.all_sprites.add(pup)
+                    # Determine powerup drop pool based on current level
+                    self._try_drop_powerup(enemy)
 
-        # 2. Enemy lasers hitting Player ship
+        # 2. Homing missiles hitting enemies (Sprint 2)
+        missile_hits = pg.sprite.groupcollide(self.enemies, self.missiles, False, True)
+        for enemy, missiles_hit in missile_hits.items():
+            for _ in missiles_hit:
+                # Big orange-yellow explosion for missile impact
+                spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery,
+                                color=(255, 150, 0), count=40, speed_range=(80, 300))
+                self.trigger_shake(0.4, 8)
+                
+                if enemy.get_hit(Missile.DAMAGE):
+                    self.score += enemy.score_value
+                    self._try_drop_powerup(enemy)
+
+        # 3. Enemy lasers hitting Player ship
         # pg.sprite.spritecollide checks one sprite against a group.
         # dokill=True deletes the enemy laser on impact.
         player_laser_hits = pg.sprite.spritecollide(self.player, self.enemy_lasers, True)
@@ -299,7 +296,7 @@ class PlayState(State):
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
 
-        # 3. Enemy ships colliding directly with Player ship
+        # 4. Enemy ships colliding directly with Player ship
         # (Crashing deals heavy damage and destroys the enemy)
         crash_hits = pg.sprite.spritecollide(self.player, self.enemies, True)
         for enemy in crash_hits:
@@ -312,7 +309,7 @@ class PlayState(State):
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
 
-        # 4. Player ship absorbing floating Power-Ups
+        # 5. Player ship absorbing floating Power-Ups
         pup_collects = pg.sprite.spritecollide(self.player, self.powerups, True)
         for pup in pup_collects:
             # White particle absorption effect
@@ -322,11 +319,41 @@ class PlayState(State):
                 # Recharge player shield points
                 self.player.shield = min(self.player.max_shield, self.player.shield + 40)
             elif pup.type == "triple":
-                # Activate triple firing guns for 8 seconds
-                self.player.triple_shot_timer = 8.0
+                # Activate triple firing guns for 12 seconds (Sprint 2: increased from 8)
+                self.player.triple_shot_timer = 12.0
             elif pup.type == "speed":
-                # Activate 1.5x engine speed boost for 8 seconds
-                self.player.speed_boost_timer = 8.0
+                # Activate 1.5x engine speed boost for 12 seconds (Sprint 2: increased from 8)
+                self.player.speed_boost_timer = 12.0
+            elif pup.type == "health":
+                # Restore up to 30 HP, never exceeding max_health (Sprint 2 new)
+                self.player.health = min(self.player.max_health, self.player.health + 30)
+            elif pup.type == "power_laser":
+                # 2x damage red laser for 10 seconds (Sprint 2 new)
+                self.player.laser_power_timer = 10.0
+            elif pup.type == "missile":
+                # Add one homing missile to inventory (Sprint 2 new)
+                self.player.missile_count += 1
+
+    def _try_drop_powerup(self, enemy):
+        """
+        Decides whether a destroyed enemy drops a power-up, and which type.
+        From Level 3 onwards, the extra Sprint 2 powerup types can drop.
+        """
+        if random.random() < 0.15:
+            # From level 3+, include the new Sprint 2 powerup types
+            if self.level_sys.level_number >= 3:
+                all_types = PowerUp.BASE_TYPES + PowerUp.EXTRA_TYPES
+                # Weights: base types slightly more common than new types
+                weights = [0.20, 0.15, 0.15,   # shield, triple, speed
+                           0.20, 0.15, 0.15]   # health, power_laser, missile
+            else:
+                all_types = PowerUp.BASE_TYPES
+                weights   = [0.4, 0.3, 0.3]
+            
+            ptype = random.choices(all_types, weights=weights)[0]
+            pup = PowerUp(self.game, enemy.rect.centerx, enemy.rect.centery, ptype)
+            self.powerups.add(pup)
+            self.all_sprites.add(pup)
 
     def draw(self, screen):
         # Draw everything onto the offscreen double-buffer canvas
@@ -353,21 +380,26 @@ class PlayState(State):
             # Center the shield aura relative to player coordinates
             self.canvas.blit(shield_surf, shield_surf.get_rect(center=self.player.rect.center))
 
-        # Render User Interface HUD (Health, Shields, Wave text, timers)
+        # Render User Interface HUD (Health, Shields, Level/Wave text, timers)
         self._draw_hud()
 
         # Final blit onto physical display screen, applying coordinates offset by screen shake values
         screen.blit(self.canvas, self.shake_offset)
 
     def _draw_hud(self):
-        """Renders information layout on screen (Score, Wave, Health/Shield Meters, Powerup Timers)."""
+        """Renders information layout on screen (Score, Level/Wave, Health/Shield Meters, Powerup Timers)."""
         # 1. SCORE
         score_surf = self.game.assets.font.render(f"SCORE: {self.score}", True, (255, 255, 255))
         self.canvas.blit(score_surf, (25, 20))
         
-        # 2. WAVE TRACKER
-        wave_txt = f"WAVE: {self.wave}" if self.wave < 5 else "WAVE: FINAL"
-        wave_surf = self.game.assets.font.render(wave_txt, True, (0, 255, 200))
+        # 2. LEVEL & WAVE TRACKER (Sprint 2: shows both level and wave)
+        if self.level_sys.is_boss_wave:
+            wave_txt = f"LVL {self.level_sys.level_number} — BOSS"
+            wave_color = (255, 80, 80)
+        else:
+            wave_txt = f"LVL {self.level_sys.level_number}  WAVE {self.level_sys.wave_number}"
+            wave_color = (0, 255, 200)
+        wave_surf = self.game.assets.font.render(wave_txt, True, wave_color)
         self.canvas.blit(wave_surf, (self.game.width - wave_surf.get_width() - 25, 20))
         
         # 3. HEALTH & SHIELD PROGRESS BARS (Center Dashboard)
@@ -396,38 +428,50 @@ class PlayState(State):
             life_img = self.game.assets.get_image("player", 22, 22)
             self.canvas.blit(life_img, (25 + i * 28, 55))
 
-        # 5. POWER-UP EXPIRY METERS
+        # 5. MISSILE COUNT INDICATOR (Sprint 2)
+        if self.player.missile_count > 0:
+            missile_icon = self.game.assets.get_image("missile", 12, 24)
+            for i in range(self.player.missile_count):
+                self.canvas.blit(missile_icon, (25 + i * 18, 85))
+            m_lbl = self.game.assets.hud_font.render("MISSILES [M]", True, (255, 130, 0))
+            self.canvas.blit(m_lbl, (25 + self.player.missile_count * 18 + 4, 89))
+
+        # 6. POWER-UP EXPIRY METERS (Sprint 2: updated timers for triple/speed, added power_laser)
+        TRIPLE_MAX = 12.0
+        SPEED_MAX  = 12.0
+        POWER_MAX  = 10.0
+
         active_timers = []
         if self.player.triple_shot_timer > 0:
-            active_timers.append(("TRIPLE SHOT", self.player.triple_shot_timer, (255, 50, 50)))
+            active_timers.append(("TRIPLE SHOT",  self.player.triple_shot_timer, TRIPLE_MAX, (255, 50, 50)))
         if self.player.speed_boost_timer > 0:
-            active_timers.append(("SPEED BOOST", self.player.speed_boost_timer, (255, 200, 0)))
+            active_timers.append(("SPEED BOOST",  self.player.speed_boost_timer, SPEED_MAX,  (255, 200, 0)))
+        if self.player.laser_power_timer > 0:
+            active_timers.append(("POWER LASER",  self.player.laser_power_timer, POWER_MAX,  (220, 60, 0)))
 
-        for idx, (label, timer, color) in enumerate(active_timers):
-            # Render text label (e.g. "TRIPLE SHOT")
+        for idx, (label, timer, max_time, color) in enumerate(active_timers):
             lbl_surf = self.game.assets.hud_font.render(label, True, color)
             self.canvas.blit(lbl_surf, (25, self.game.height - 110 + idx * 30))
             
-            # Render a shrinking bar showing duration remaining
-            bar_len = int((timer / 8.0) * 100)
+            bar_len = int((timer / max_time) * 100)
             pg.draw.rect(self.canvas, (40, 40, 40), (140, self.game.height - 100 + idx * 30, 100, 6))
-            pg.draw.rect(self.canvas, color, (140, self.game.height - 100 + idx * 30, bar_len, 6))
+            pg.draw.rect(self.canvas, color,        (140, self.game.height - 100 + idx * 30, bar_len, 6))
 
-        # 6. WAVE START BANNERS (Big overlay in center-screen)
+        # 7. WAVE START BANNERS (Big overlay in center-screen)
         if self.wave_intro_timer > 0:
-            overlay_txt = f"WAVE {self.wave}" if self.wave < 5 else "⚠ BOSS INCOMING ⚠"
-            overlay_color = (0, 255, 200) if self.wave < 5 else (255, 0, 50)
+            overlay_txt   = self.level_sys.banner_text()
+            overlay_color = self.level_sys.banner_color()
             
             banner_surf = self.game.assets.title_font.render(overlay_txt, True, overlay_color)
-            banner_rect = banner_surf.get_rect(center=(self.game.width // 2, self.game.height // 2.5))
+            banner_rect = banner_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 - 40))
             
             # Semi-transparent dark letterbox stripe behind text
             stripe = pg.Surface((self.game.width, 100), pg.SRCALPHA)
             stripe.fill((0, 0, 0, 140))
-            self.canvas.blit(stripe, (0, self.game.height // 2.5 - 50))
+            self.canvas.blit(stripe, (0, self.game.height // 2 - 90))
             self.canvas.blit(banner_surf, banner_rect)
 
-        # 7. BOSS HEALTH BAR (Top center overlay - only shows if boss is spawned)
+        # 8. BOSS HEALTH BAR (Top center overlay - only shows if boss is spawned)
         if self.boss_active and self.boss_instance and self.boss_instance.alive():
             boss_bar_w, boss_bar_h = 600, 14
             boss_x = self.game.width // 2 - boss_bar_w // 2
@@ -565,6 +609,53 @@ class GameOverState(State):
         screen.blit(hint, hint_rect)
 
 
+class GameCompleteState(State):
+    """
+    Sprint 2 — Victory screen shown when the player beats all 10 levels.
+    """
+    def __init__(self, game, score):
+        super().__init__(game)
+        self.score = score
+        self.save_system = SaveSystem()
+        self.starfield   = Starfield(self.game.width, self.game.height, num_stars=150)
+        self.timer       = 0.0   # Used for animation
+
+    def handle_events(self, events):
+        for event in events:
+            if event.type == pg.KEYDOWN:
+                if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
+                    # Auto-save with name "PILOT" and go to leaderboard
+                    self.save_system.save_score("VICTOR", self.score)
+                    self.game.change_state(HighScoresState(self.game))
+
+    def update(self, dt):
+        self.starfield.update(dt)
+        self.timer += dt
+
+    def draw(self, screen):
+        screen.fill((5, 8, 18))
+        self.starfield.draw(screen)
+
+        # Pulsing golden title
+        pulse = int(200 + 55 * math.sin(self.timer * 3))
+        title_color = (pulse, int(pulse * 0.85), 0)
+        title = self.game.assets.title_font.render("MISSION COMPLETE", True, title_color)
+        title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 4))
+        screen.blit(title, title_rect)
+
+        sub = self.game.assets.font.render("You have defeated all 10 levels!", True, (0, 255, 200))
+        sub_rect = sub.get_rect(center=(self.game.width // 2, self.game.height // 4 + 60))
+        screen.blit(sub, sub_rect)
+
+        score_surf = self.game.assets.font.render(f"Final Score: {self.score}", True, (255, 255, 255))
+        score_rect = score_surf.get_rect(center=(self.game.width // 2, self.game.height // 2))
+        screen.blit(score_surf, score_rect)
+
+        hint = self.game.assets.font.render("Press ENTER / SPACE to view Leaderboard", True, (100, 130, 150))
+        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 100))
+        screen.blit(hint, hint_rect)
+
+
 class HighScoresState(State):
     """State representing the Top-10 Leaderboard listing loaded from SaveSystem."""
     def __init__(self, game):
@@ -590,21 +681,21 @@ class HighScoresState(State):
         
         # Draw high scores in a formatted 3-column table
         for idx, item in enumerate(self.scores_list[:10]):
-            rank = f"{idx+1}."
-            name = item.get("name", "PILOT")
+            rank  = f"{idx+1}."
+            name  = item.get("name", "PILOT")
             score = str(item.get("score", 0))
             
             # Gold color for 1st place, silver-cyan for top 3, muted grey for rest
             color = (255, 220, 0) if idx == 0 else ((200, 220, 240) if idx < 3 else (130, 150, 170))
             
-            rank_surf = self.game.assets.font.render(rank, True, color)
-            name_surf = self.game.assets.font.render(name, True, color)
+            rank_surf  = self.game.assets.font.render(rank,  True, color)
+            name_surf  = self.game.assets.font.render(name,  True, color)
             score_surf = self.game.assets.font.render(score, True, color)
             
             # Beautiful horizontal spacing alignments (Rank left, Name center, Score right)
             y_pos = self.game.height // 3.2 + idx * 36
-            screen.blit(rank_surf, (self.game.width // 2 - 180, y_pos))
-            screen.blit(name_surf, (self.game.width // 2 - 80, y_pos))
+            screen.blit(rank_surf,  (self.game.width // 2 - 180, y_pos))
+            screen.blit(name_surf,  (self.game.width // 2 -  80, y_pos))
             screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
             
         # Return instructions

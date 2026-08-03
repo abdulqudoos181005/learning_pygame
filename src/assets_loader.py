@@ -167,6 +167,12 @@ class AssetsLoader:
             # Orange inner line
             pg.draw.rect(surf, (255, 180, 0), (w // 2 - 1, 2, 2, h - 4), border_radius=1)
 
+        elif name == "laser_power":
+            # Power laser: thick red beam with bright white-yellow core (2x damage)
+            surf = pg.Surface((w, h), pg.SRCALPHA)
+            pg.draw.rect(surf, (220, 0, 0),     (w // 2 - 3, 0, 6, h), border_radius=2)
+            pg.draw.rect(surf, (255, 180, 50),  (w // 2 - 1, 2, 2, h - 4), border_radius=1)
+
         elif name == "laser_boss":
             # Boss heavy projectile: thick glowing green plasma beam
             surf = pg.Surface((w, h), pg.SRCALPHA)
@@ -186,6 +192,44 @@ class AssetsLoader:
             pg.draw.circle(surf, (150, 20, 20, 100), (w // 2, h // 2), w // 2 - 6)
             txt = self.hud_font.render("T", True, (255, 255, 255))
             surf.blit(txt, txt.get_rect(center=(w // 2, h // 2)))
+
+        elif name == "powerup_health":
+            # Health boost orb: glowing green cross (medical)
+            pg.draw.circle(surf, (0, 220, 80), (w // 2, h // 2), w // 2 - 4, 3)
+            pg.draw.circle(surf, (0, 100, 40, 100), (w // 2, h // 2), w // 2 - 6)
+            # Draw cross shape
+            cx, cy = w // 2, h // 2
+            bar = max(3, w // 6)
+            pg.draw.rect(surf, (255, 255, 255), (cx - bar, cy - 1, bar * 2, 3))
+            pg.draw.rect(surf, (255, 255, 255), (cx - 1, cy - bar, 3, bar * 2))
+
+        elif name == "powerup_power_laser":
+            # Power laser orb: glowing crimson-red shell with 'P' label
+            pg.draw.circle(surf, (220, 0, 0),    (w // 2, h // 2), w // 2 - 4, 3)
+            pg.draw.circle(surf, (120, 0, 0, 100), (w // 2, h // 2), w // 2 - 6)
+            txt = self.hud_font.render("P", True, (255, 180, 50))
+            surf.blit(txt, txt.get_rect(center=(w // 2, h // 2)))
+
+        elif name == "powerup_missile":
+            # Missile powerup orb: orange shell with 'M' label
+            pg.draw.circle(surf, (255, 120, 0),  (w // 2, h // 2), w // 2 - 4, 3)
+            pg.draw.circle(surf, (150, 70, 0, 100), (w // 2, h // 2), w // 2 - 6)
+            txt = self.hud_font.render("M", True, (255, 255, 255))
+            surf.blit(txt, txt.get_rect(center=(w // 2, h // 2)))
+
+        elif name == "missile":
+            # Homing missile: orange body with pointed tip and fin detail
+            # Body
+            pg.draw.rect(surf, (255, 100, 0), (w // 2 - 3, h // 4, 6, h // 2), border_radius=2)
+            # Nose cone (triangle pointing up)
+            tip_pts = [(w // 2, 0), (w // 2 - 4, h // 4), (w // 2 + 4, h // 4)]
+            pg.draw.polygon(surf, (255, 200, 0), tip_pts)
+            # Left fin
+            pg.draw.polygon(surf, (200, 60, 0), [(w // 2 - 3, h // 2), (w // 2 - 8, h * 3 // 4), (w // 2 - 3, h * 3 // 4)])
+            # Right fin
+            pg.draw.polygon(surf, (200, 60, 0), [(w // 2 + 3, h // 2), (w // 2 + 8, h * 3 // 4), (w // 2 + 3, h * 3 // 4)])
+            # Exhaust glow
+            pg.draw.ellipse(surf, (255, 255, 100), (w // 2 - 3, h * 3 // 4, 6, 4))
 
         elif name == "powerup_speed":
             # Speed boost orb: golden-yellow shell containing letter 'V' (Velocity)

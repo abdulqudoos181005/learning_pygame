@@ -1,112 +1,195 @@
-# Space Shooters Game - Development Plan
+# Space Shooters Game — Development Plan
 
-This plan details the design, architecture, and step-by-step roadmap to build a fully polished, production-ready, and shippable **Space Shooters** game using Pygame.
-
----
-
-## User Review Required
-
-> [!IMPORTANT]
-> **Resolution & Aspect Ratio**: We propose a default virtual resolution of **1280x720 (16:9 HD)**, which is standard for modern desktop indie games. Let us know if you prefer a different resolution or want full-screen toggle support.
->
-> **Asset Style**: A shippable game requires clean assets. We can generate placeholder or custom art/sprites if needed, or we can use stylized procedural shapes/vector graphics to keep the game code self-contained and modern.
+This plan tracks the full design, architecture, and progress of the **Space Shooters** Pygame project.
 
 ---
 
-## Open Questions
+## Decisions Made
 
-> [!IMPORTANT]
-> 1. **Control Scheme**: Should the player move with standard WASD/Arrow keys and fire with the `Spacebar`, or would you like to support mouse steering/aiming as well?
-> 2. **Game Loop Style**: Do you want an endless shooter with increasing difficulty (waves) and high scores, or a level-based shooter with a distinct ending and a final Boss?
-> 3. **Assets**: Do you have custom graphics/audio files you want to use, or should we write code that works with procedurally generated textures and royalty-free sounds?
+> [!NOTE]
+> - **Resolution**: 1280×720 (16:9 HD) — standard desktop indie resolution.
+> - **Controls**: WASD / Arrow keys to move, SPACE to shoot, M to launch missile, ESC to pause.
+> - **Game Style**: Level-based shooter — 10 levels with increasing difficulty and a final Boss on Level 10.
+> - **Assets**: Procedurally generated vector art + graceful PNG fallback via `AssetsLoader`.
 
 ---
 
-## Proposed Changes
+## Sprint 1 — ✅ COMPLETE
 
-We will build the game modularly inside the [src](file:///d:/projects/learning_pygame/src) directory.
+All core architecture and gameplay systems were built.
 
 ### 1. Game Architecture & Manager
-A state-machine pattern to handle screen transitions (Main Menu, Gameplay, Pause, Game Over, Leaderboard).
 
-#### [NEW] [game.py](file:///d:/projects/learning_pygame/src/game.py)
-The central manager class containing the game loop, state controller, event dispatcher, and common services (asset loading, audio manager).
+#### ✅ [DONE] [game.py](file:///d:/projects/learning_pygame/src/game.py)
+The central engine class:
+- Initializes Pygame, mixer, display window (1280×720), and clock.
+- Hosts the main game loop (60 FPS cap, delta-time based).
+- Manages state switching via the **State Pattern** (`change_state()`).
+- Owns the shared `AssetsLoader` instance used by all states/sprites.
 
-#### [NEW] [states.py](file:///d:/projects/learning_pygame/src/states.py)
-Definitions of all game states: `MenuState`, `PlayState`, `PauseState`, `GameOverState`, `HighScoresState`.
+#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
+All game states implemented:
+- `MenuState` — animated starfield, keyboard-navigated option list (Play, High Scores, Quit).
+- `PlayState` — main gameplay loop with enemy waves, HUD, screen shake, collisions.
+- `PauseState` — semi-transparent overlay, resume / quit to menu.
+- `GameOverState` — name entry with blinking cursor, score saved to JSON.
+- `HighScoresState` — top-10 leaderboard table loaded from JSON.
 
 ---
 
 ### 2. Entities & Physics
-Using Pygame's Sprite groups for collisions, updating, and drawing.
 
-#### [NEW] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
-- `Player`: Player ship with health, lives, weapon state, and engine trail.
-- `Laser`: Projectiles fired by Player/Enemies with direction and speed.
-- `Enemy`: Standard enemy class with subclass variants:
-  - `Scout`: Fast, low health.
-  - `Stinger`: Fires targeted lasers.
-  - `Cruiser`: High health, slow.
-  - `Boss`: Multiple phases, health bar, special attack patterns.
-- `PowerUp`: Drops (Shield, Triple Shot, Speed Boost) that spawn from destroyed enemies.
+#### ✅ [DONE] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
+- `Player`: WASD movement, shield system, weapon firing, power-up timers.
+- `Laser`: Directional projectile with angle support; player vs enemy variants.
+- `Enemy`: Three type variants — `Scout`, `Stinger`, `Cruiser` — each with unique movement and attack patterns.
+- `Boss`: Three-phase attack boss with health bar and phase-based firing patterns.
+- `PowerUp`: Floating drops — Shield, Triple Shot, Speed Boost.
 
 ---
 
 ### 3. FX & UI Systems
-Visual polish and HUD.
 
-#### [NEW] [fx.py](file:///d:/projects/learning_pygame/src/fx.py)
-- Particle effects for engine thrusters, laser impacts, and explosions.
-- Screen shake helper for heavy damage/explosions.
-- Scrolling parallax starfield background.
+#### ✅ [DONE] [fx.py](file:///d:/projects/learning_pygame/src/fx.py)
+- `Starfield`: 3-layer parallax scrolling star background.
+- `Particle` + `spawn_explosion()`: Radial particle bursts for explosions.
+- `spawn_sparks()`: Directional spark impacts on laser hits.
+- Screen shake double-buffer system (canvas → offset blit).
 
-#### [NEW] [ui.py](file:///d:/projects/learning_pygame/src/ui.py)
-HUD rendering (health bar, lives icon, score, power-up timers) and main menu buttons with hover effects.
+#### ⚠️ [SKIPPED] ui.py
+HUD was implemented directly inside `PlayState._draw_hud()` instead of a separate file. No standalone `ui.py` was created — HUD is self-contained in `states.py`.
 
 ---
 
 ### 4. Data & Packaging
-Persisting scores and bundling.
 
-#### [NEW] [save_system.py](file:///d:/projects/learning_pygame/src/save_system.py)
-Handles loading and saving high scores locally using JSON format.
+#### ✅ [DONE] [save_system.py](file:///d:/projects/learning_pygame/src/save_system.py)
+- Loads/saves high scores to `high_scores.json` at project root.
+- Auto-sorts and caps at top 10. Defaults to sample scores on first launch.
 
-#### [NEW] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
-A centralized loader that automatically falls back to procedural drawing (circles, rectangles, basic shapes) if asset files (PNGs, WAVs) are missing, preventing crashes.
-
----
-
-## Sprint 1 — Completed ✅
-
-All core files have been created:
-- [game.py](file:///d:/projects/learning_pygame/src/game.py) — Game loop & state machine
-- [states.py](file:///d:/projects/learning_pygame/src/states.py) — All game states
-- [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py) — Player, enemies, lasers, powerups
-- [fx.py](file:///d:/projects/learning_pygame/src/fx.py) — Particles, screen shake, starfield
-- [save_system.py](file:///d:/projects/learning_pygame/src/save_system.py) — High score persistence
-- [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py) — Asset loading with procedural fallback
+#### ✅ [DONE] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
+- Caches images and sounds to avoid repeated disk reads.
+- Procedural vector fallback for all sprites if PNG files are missing.
+- System font loading (`Trebuchet MS`) for HUD, title, and menu text.
 
 ---
 
-## Sprint 2 — Upcoming
+## Sprint 2 — ✅ COMPLETE
+
+Level system, new powerups, and homing missile weapon implemented.
+
+### 1. Level System
+
+#### ✅ [NEW] [level_system.py](file:///d:/projects/learning_pygame/src/level_system.py)
+Replaces the old open-ended wave counter with a structured **10-level config system**:
+- Each level has 2 waves. Enemies get progressively harder (more HP, faster speed) via `hp_mult` / `spd_mult`.
+- Boss encounters at **Level 5** and **Level 10** (final boss — 2× HP + 1.3× speed).
+- `LevelSystem.tick_spawn(dt)` returns the next enemy type to spawn each frame.
+- `LevelSystem.advance_wave()` handles wave → level → `"complete"` transitions.
+- Banner text + color driven by `banner_text()` / `banner_color()` methods.
+
+---
+
+### 2. New Sprites & Weapons
+
+#### ✅ [MODIFIED] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
+
+**Laser changes:**
+- Added `damage` parameter (default 10 for player, auto for enemy).
+- Power laser variant uses `img_name="laser_power"` for red visual + 20 damage.
+
+**Player changes:**
+- `laser_power_timer` — activates red 2× damage laser for 10 seconds.
+- `missile_count` — stored homing missiles; launched with **M key**.
+- `missile_cooldown` — prevents missile spam (0.5s between launches).
+- `triple_shot_timer` and `speed_boost_timer` still present (duration now 12s each).
+
+**Enemy changes:**
+- `hp_mult` and `spd_mult` constructor params — scale health and speed per level config.
+
+**Boss changes:**
+- Accepts `hp_mult` and `spd_mult` — final boss at Level 10 has 2× health.
+- Phase transitions now proportional to `max_health` (30% / 70% thresholds).
+- `score_value` also scales with `hp_mult`.
+
+**New: `Missile` sprite:**
+- Homing missile that targets the enemy with the **highest current health**.
+- Steers with a configurable turn rate (`TURN_RATE = 3.5 rad/s`), speed `450 px/s`.
+- Deals `30 damage` on collision + triggers a large orange explosion.
+- Rotates its sprite dynamically to match heading direction.
+
+**PowerUp changes:**
+- `BASE_TYPES` = `shield`, `triple`, `speed` (all levels).
+- `EXTRA_TYPES` = `health`, `power_laser`, `missile` (unlocked from Level 3+).
+
+---
+
+### 3. New Assets
+
+#### ✅ [MODIFIED] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
+New procedural images added:
+- `laser_power` — thick red beam with orange-yellow core.
+- `powerup_health` — green circle with white cross (medical style).
+- `powerup_power_laser` — crimson orb with `P` label.
+- `powerup_missile` — orange orb with `M` label.
+- `missile` — orange rocket with nose cone, fins, and exhaust glow.
+
+---
+
+### 4. PlayState & HUD Overhaul
+
+#### ✅ [MODIFIED] [states.py](file:///d:/projects/learning_pygame/src/states.py)
+
+**PlayState changes:**
+- Uses `LevelSystem` for all wave/level logic — no more hardcoded wave variables.
+- Added `missiles` sprite group; missile vs enemy collision (30 dmg + explosion + screen shake).
+- Powerup collection handles all 6 types:
+  - `shield` → +40 shield (capped at max).
+  - `triple` → 12s triple shot (↑ from 8s).
+  - `speed` → 12s speed boost (↑ from 8s).
+  - `health` → +30 HP (capped at 100). *(New)*
+  - `power_laser` → 10s red 2× damage laser. *(New)*
+  - `missile` → +1 missile to inventory. *(New)*
+- Powerup drops from Level 3+ include the 3 new extra types (equal weight spread).
+
+**HUD additions:**
+- Level + Wave tracker replaces old wave-only counter.
+- Missile inventory display with icon row + `[M]` label.
+- Power Laser timer bar added to active powerup section.
+- Wave banner now uses `LevelSystem.banner_text()` / `banner_color()`.
+
+**New: `GameCompleteState`:**
+- Victory screen with pulsing gold title shown after beating Level 10.
+- Auto-saves score as `"VICTOR"` and redirects to leaderboard.
+
+---
+
+## Sprint 3 — Planned
 
 > [!NOTE]
-> This section will be filled in as we plan the next phase of development. Possible areas include:
-> - Boss battle implementation & phase transitions
-> - Audio system integration (sound effects + background music)
-> - Full UI polish (animated menus, transitions)
-> - Level/wave progression system
-> - PyInstaller packaging for Windows distribution
+> Possible areas for the next sprint:
+> - 🎵 Audio system — background music + sound effects (laser fire, explosion, powerup collect)
+> - 🖥️ Animated main menu transitions and screen fade-ins
+> - 📦 PyInstaller packaging for standalone Windows `.exe` distribution
+> - 🌊 Bonus: mid-level miniboss encounters or asteroid hazard obstacles
 
 ---
 
 ## Verification Plan
 
-### Automated Tests
-- Scripted tests to verify collision math and screen boundary logic.
-- JSON save system unit tests for read/write integrity.
+### Automated Tests ✅
+- `level_system.py` — advance through all 10 levels, verify `"complete"` signal and boss wave detection.
+- `sprites.py` — import check, `PowerUp.BASE_TYPES`, `PowerUp.EXTRA_TYPES`, `Missile.DAMAGE` constants.
+- `states.py` — `PlayState` instantiation and `update(dt)` with headless display.
+- All 7 source files — AST syntax parse with zero errors.
 
-### Manual Verification
-- Playtest controls, enemy movement patterns, boss battles, and frame rate stability.
-- Verify resolution scaling, screen-shake duration, and audio playback.
-- Package using `PyInstaller` and run on Windows.
+### Manual Verification (To Do)
+- [ ] Playtest Level 1–2: scouts and stingers spawn correctly.
+- [ ] Playtest Level 3+: cruisers appear, new powerups drop.
+- [ ] Verify health boost pickup doesn't exceed 100 HP.
+- [ ] Verify power laser fires red and deals 2× damage.
+- [ ] Verify missile homes on highest-HP enemy and explodes on hit.
+- [ ] Verify boss appears at Level 5 and Level 10 with correct HP scaling.
+- [ ] Verify `GameCompleteState` displays after Level 10 boss defeat.
+- [ ] Verify triple-shot timer shows 12s bar (not 8s).
+- [ ] Verify speed boost timer shows 12s bar (not 8s).

@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import pygame as pg
 import random
 import math
@@ -21,10 +22,13 @@ class Player(pg.sprite.Sprite):
         self.shoot_cooldown = 0.25 # seconds
         self.shoot_timer = 0.0
         
-        # Power-up states
+        # Power-up states (Sprint 2: triple-shot & speed timers increased to 12s)
         self.triple_shot_timer = 0.0
         self.speed_boost_timer = 0.0
         self.shield_active = False
+        self.laser_power_timer = 0.0   # Power laser: 2x damage, red color (10s)
+        self.missile_count = 0         # Stored homing missiles (activated by M key)
+        self.missile_cooldown = 0.0    # Prevent spamming missiles
 
     def get_hit(self, damage):
         """Handle damage to player ship, affecting shield first then health."""
@@ -57,6 +61,10 @@ class Player(pg.sprite.Sprite):
             self.triple_shot_timer -= dt
         if self.speed_boost_timer > 0:
             self.speed_boost_timer -= dt
+        if self.laser_power_timer > 0:
+            self.laser_power_timer -= dt
+        if self.missile_cooldown > 0:
+            self.missile_cooldown -= dt
             
         self.shield_active = self.shield > 0
 
@@ -95,9 +103,14 @@ class Player(pg.sprite.Sprite):
         if self.rect.bottom > self.game.height:
             self.rect.bottom = self.game.height
 
-        # Fire weapons
+        # Fire regular weapons
         if keys[pg.K_SPACE] or keys[pg.K_j]:
             self.shoot()
+        
+        # Launch missile (M key) — homing special weapon
+        if keys[pg.K_m] and self.missile_count > 0 and self.missile_cooldown <= 0:
+            self._launch_missile()
+            self.missile_cooldown = 0.5  # Half-second cooldown between launches
 
     def shoot(self):
         if self.shoot_timer <= 0:
@@ -107,30 +120,48 @@ class Player(pg.sprite.Sprite):
             state = self.game.state
             if not hasattr(state, 'player_lasers'):
                 return
+            
+            # Power laser: 2x damage, red tint
+            is_power = self.laser_power_timer > 0
+            laser_dmg = 20 if is_power else 10
+            img_name  = "laser_power" if is_power else "laser_player"
                 
             if self.triple_shot_timer > 0:
                 # Fire 3 lasers (center, diagonal-left, diagonal-right)
-                laser_center = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, angle=0)
-                laser_left = Laser(self.game, self.rect.left, self.rect.top, speed_y=-550, angle=-15)
-                laser_right = Laser(self.game, self.rect.right, self.rect.top, speed_y=-550, angle=15)
+                laser_center = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, angle=0,   damage=laser_dmg, img_name=img_name)
+                laser_left   = Laser(self.game, self.rect.left,   self.rect.top, speed_y=-550, angle=-15, damage=laser_dmg, img_name=img_name)
+                laser_right  = Laser(self.game, self.rect.right,  self.rect.top, speed_y=-550, angle=15,  damage=laser_dmg, img_name=img_name)
                 state.player_lasers.add(laser_center, laser_left, laser_right)
                 state.all_sprites.add(laser_center, laser_left, laser_right)
             else:
                 # Single center shot
-                laser = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600)
+                laser = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, damage=laser_dmg, img_name=img_name)
                 state.player_lasers.add(laser)
                 state.all_sprites.add(laser)
 
+    def _launch_missile(self):
+        """Spawns a homing Missile targeting the highest-health enemy on screen."""
+        state = self.game.state
+        if not hasattr(state, 'enemies') or not hasattr(state, 'missiles'):
+            return
+        
+        self.missile_count -= 1
+        missile = Missile(self.game, self.rect.centerx, self.rect.top, state.enemies)
+        state.missiles.add(missile)
+        state.all_sprites.add(missile)
+
 
 class Laser(pg.sprite.Sprite):
-    def __init__(self, game, x, y, speed_y, angle=0):
+    def __init__(self, game, x, y, speed_y, angle=0, damage=10, img_name=None):
         super().__init__()
         self.game = game
         self.angle = angle
+        self.damage = damage
         
-        # Select appropriate image based on direction (player moves up/negative, enemy moves down/positive)
+        # Select appropriate image based on direction unless overridden by caller
         is_player = speed_y < 0
-        img_name = "laser_player" if is_player else "laser_enemy"
+        if img_name is None:
+            img_name = "laser_player" if is_player else "laser_enemy"
         
         self.raw_image = self.game.assets.get_image(img_name, 12, 32)
         if self.angle != 0:
@@ -140,11 +171,8 @@ class Laser(pg.sprite.Sprite):
             
         self.rect = self.image.get_rect(center=(x, y))
         
-        # Speeds
-        self.speed_y = speed_y
-        self.speed_x = speed_y * math.sin(math.radians(self.angle)) if self.angle != 0 else 0
+        # Resolve speed into X/Y components accounting for angle
         if is_player:
-            # Adjust horizontal speed correctly for shooting angle
             self.speed_x = -abs(speed_y) * math.sin(math.radians(self.angle))
             self.speed_y = -abs(speed_y) * math.cos(math.radians(self.angle))
         else:
@@ -161,7 +189,7 @@ class Laser(pg.sprite.Sprite):
 
 
 class Enemy(pg.sprite.Sprite):
-    def __init__(self, game, x, y, enemy_type="scout"):
+    def __init__(self, game, x, y, enemy_type="scout", hp_mult=1.0, spd_mult=1.0):
         super().__init__()
         self.game = game
         self.type = enemy_type
@@ -169,31 +197,31 @@ class Enemy(pg.sprite.Sprite):
         # Configure variables based on enemy type
         if self.type == "scout":
             self.image = self.game.assets.get_image("enemy_scout", 45, 45)
-            self.speed_y = random.randint(180, 240)
+            self.speed_y = random.randint(180, 240) * spd_mult
             self.speed_x = 0
-            self.max_health = 10
+            self.max_health = int(10 * hp_mult)
             self.shoot_delay = 9999.0 # Scouts don't shoot
             self.score_value = 100
         elif self.type == "stinger":
             self.image = self.game.assets.get_image("enemy_stinger", 48, 48)
-            self.speed_y = random.randint(100, 150)
+            self.speed_y = random.randint(100, 150) * spd_mult
             # Gentle side-to-side sweeping motion
-            self.speed_x = random.choice([-80, 80])
-            self.max_health = 20
+            self.speed_x = random.choice([-80, 80]) * spd_mult
+            self.max_health = int(20 * hp_mult)
             self.shoot_delay = random.uniform(1.5, 2.5)
             self.score_value = 250
         elif self.type == "cruiser":
             self.image = self.game.assets.get_image("enemy_cruiser", 70, 70)
-            self.speed_y = random.randint(50, 80)
+            self.speed_y = random.randint(50, 80) * spd_mult
             self.speed_x = 0
-            self.max_health = 60
+            self.max_health = int(60 * hp_mult)
             self.shoot_delay = random.uniform(2.0, 3.5)
             self.score_value = 500
         else: # default placeholder
             self.image = self.game.assets.get_image("enemy_scout", 45, 45)
-            self.speed_y = 150
+            self.speed_y = 150 * spd_mult
             self.speed_x = 0
-            self.max_health = 10
+            self.max_health = int(10 * hp_mult)
             self.shoot_delay = 3.0
             self.score_value = 100
             
@@ -261,18 +289,19 @@ class Enemy(pg.sprite.Sprite):
 
 
 class Boss(pg.sprite.Sprite):
-    def __init__(self, game):
+    def __init__(self, game, hp_mult=1.0, spd_mult=1.0):
         super().__init__()
         self.game = game
         self.image = self.game.assets.get_image("boss", 150, 100)
         self.rect = self.image.get_rect(center=(self.game.width // 2, -100))
         
-        # Stats
-        self.max_health = 500
-        self.health = 500
-        self.speed_x = 100
+        # Stats (scaled by level multipliers)
+        base_health = 500
+        self.max_health = int(base_health * hp_mult)
+        self.health = self.max_health
+        self.speed_x = 100 * spd_mult
         self.target_y = 120
-        self.score_value = 5000
+        self.score_value = int(5000 * hp_mult)
         
         # Attack intervals
         self.shoot_timer = 2.0
@@ -280,10 +309,10 @@ class Boss(pg.sprite.Sprite):
 
     def get_hit(self, damage):
         self.health -= damage
-        # Phase transitions
-        if self.health <= 150:
+        # Phase transitions (proportional to max health)
+        if self.health <= self.max_health * 0.3:
             self.attack_phase = 3
-        elif self.health <= 350:
+        elif self.health <= self.max_health * 0.7:
             self.attack_phase = 2
             
         if self.health <= 0:
@@ -332,7 +361,7 @@ class Boss(pg.sprite.Sprite):
             
         elif self.attack_phase == 2:
             # Fire heavy green plasma beams down-left, down, down-right
-            l1 = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=420, angle=0)
+            l1 = Laser(self.game, self.rect.centerx,      self.rect.bottom, speed_y=420, angle=0)
             l2 = Laser(self.game, self.rect.centerx - 30, self.rect.bottom, speed_y=400, angle=-15)
             l3 = Laser(self.game, self.rect.centerx + 30, self.rect.bottom, speed_y=400, angle=15)
             
@@ -352,11 +381,82 @@ class Boss(pg.sprite.Sprite):
             state.all_sprites.add(l)
 
 
+class Missile(pg.sprite.Sprite):
+    """
+    A homing missile that targets the highest-health enemy on screen.
+    Deals 30 damage on impact and triggers a large explosion effect.
+    Activated by pressing M key when the player has missile_count > 0.
+    """
+    SPEED     = 450.0  # Pixels per second
+    TURN_RATE = 3.5    # Radians per second (homing steer strength)
+    DAMAGE    = 30
+
+    def __init__(self, game, x, y, enemy_group):
+        super().__init__()
+        self.game = game
+        self.enemy_group = enemy_group
+        self.image = self.game.assets.get_image("missile", 14, 28)
+        self.rect = self.image.get_rect(center=(x, y))
+        # Current heading in radians (0 = up / negative Y)
+        self.angle_rad = 0.0
+        # Float positions for sub-pixel precision
+        self.fx = float(x)
+        self.fy = float(y)
+
+    def _find_target(self):
+        """Returns the enemy sprite with the highest current health, or None."""
+        best    = None
+        best_hp = -1
+        for e in self.enemy_group:
+            if e.health > best_hp:
+                best_hp = e.health
+                best    = e
+        return best
+
+    def update(self, dt):
+        target = self._find_target()
+        if target:
+            # Vector from missile to target
+            dx = target.rect.centerx - self.fx
+            dy = target.rect.centery - self.fy
+            # atan2 gives angle from positive-X; shift so 0 rad = up (negative Y)
+            desired_angle = math.atan2(dy, dx) + math.pi / 2
+            # Smallest angular difference in [-pi, pi]
+            diff = (desired_angle - self.angle_rad + math.pi) % (2 * math.pi) - math.pi
+            max_turn = self.TURN_RATE * dt
+            self.angle_rad += max(-max_turn, min(max_turn, diff))
+
+        # Move forward in current heading direction
+        self.fx += math.sin(self.angle_rad) * self.SPEED * dt
+        self.fy -= math.cos(self.angle_rad) * self.SPEED * dt
+        self.rect.center = (int(self.fx), int(self.fy))
+
+        # Rotate sprite to match heading
+        degrees   = math.degrees(self.angle_rad)
+        base_img  = self.game.assets.get_image("missile", 14, 28)
+        self.image = pg.transform.rotate(base_img, -degrees)
+        self.rect  = self.image.get_rect(center=self.rect.center)
+
+        # Kill if it leaves the screen
+        if (self.rect.bottom < 0 or self.rect.top > self.game.height
+                or self.rect.right < 0 or self.rect.left > self.game.width):
+            self.kill()
+
+
 class PowerUp(pg.sprite.Sprite):
+    """
+    Floating power-up drop from destroyed enemies.
+    
+    Base types (all levels):  shield, triple, speed
+    Extra types (level 3+):   health, power_laser, missile
+    """
+    BASE_TYPES  = ["shield", "triple", "speed"]
+    EXTRA_TYPES = ["health", "power_laser", "missile"]
+
     def __init__(self, game, x, y, ptype=None):
         super().__init__()
         self.game = game
-        self.type = ptype or random.choice(["shield", "triple", "speed"])
+        self.type = ptype or random.choice(self.BASE_TYPES)
         
         # Load asset based on type
         self.image = self.game.assets.get_image(f"powerup_{self.type}", 32, 32)
@@ -368,4 +468,3 @@ class PowerUp(pg.sprite.Sprite):
         # Clean up if it falls off bottom screen
         if self.rect.top > self.game.height:
             self.kill()
-
