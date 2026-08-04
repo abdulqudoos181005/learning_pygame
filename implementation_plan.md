@@ -164,14 +164,34 @@ New procedural images added:
 
 ---
 
-## Sprint 3 — Planned
+## Sprint 3 
 
-> [!NOTE]
-> Possible areas for the next sprint:
-> - 🎵 Audio system — background music + sound effects (laser fire, explosion, powerup collect)
-> - 🖥️ Animated main menu transitions and screen fade-ins
-> - 📦 PyInstaller packaging for standalone Windows `.exe` distribution
-> - 🌊 Bonus: mid-level miniboss encounters or asteroid hazard obstacles
+### new game state (UI for levels)
+[description]  a state or a new screen where a player can select the level which appears after clicking "Play Game" in the main menu and the user is directed to after beating every level 
+
+### appearance 
+-> should match the theme of the UI
+-> 2 rows, 5 levels each row
+-> should display a banner "LEVELS" at the top
+-> the current highest unlocked/playble level should blink softly 
+-> completed levels should be green 
+-> Locked level (levels after the current highest unlocked/playble level) should be grayed out
+-> an exit arrow to go back to the main menu 
+-> means every level can be played multiple times
+-> make it interactive 
+-> make that so all the buttons can also be pressed via a mouse click and hovering over the button should change its color slightly to indicate it is being hovered 
+-> 
+
+
+### changes
+do as it is required 
+
+### sprites 
+-> should use the same style of sprites as the other game objects (player, enemy, powerups, etc.)
+
+
+
+
 
 ---
 
