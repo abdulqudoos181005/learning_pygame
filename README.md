@@ -10,7 +10,7 @@ learning_pygame/
 │   ├── fonts/               # Custom TTF fonts
 │   ├── images/              # Sprites, backgrounds, textures
 │   └── sounds/              # Sound effects and music
-├── lessons/                 # Pygame/Python tutorial and guide scripts
+├── lessons/                 # Python tutorial and guide scripts
 │   ├── lesson_01_classes.py # OOP basics (Classes & Objects)
 │   └── lesson_02_imports.py # Python modules & imports
 ├── src/                     # Source files for game projects and prototypes

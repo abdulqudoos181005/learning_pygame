@@ -184,12 +184,12 @@ New procedural images added:
 - All 7 source files — AST syntax parse with zero errors.
 
 ### Manual Verification (To Do)
-- [ ] Playtest Level 1–2: scouts and stingers spawn correctly.
-- [ ] Playtest Level 3+: cruisers appear, new powerups drop.
-- [ ] Verify health boost pickup doesn't exceed 100 HP.
-- [ ] Verify power laser fires red and deals 2× damage.
-- [ ] Verify missile homes on highest-HP enemy and explodes on hit.
-- [ ] Verify boss appears at Level 5 and Level 10 with correct HP scaling.
-- [ ] Verify `GameCompleteState` displays after Level 10 boss defeat.
-- [ ] Verify triple-shot timer shows 12s bar (not 8s).
-- [ ] Verify speed boost timer shows 12s bar (not 8s).
+- [done] Playtest Level 1–2: scouts and stingers spawn correctly.
+- [done] Playtest Level 3+: cruisers appear, new powerups drop.
+- [done] Verify health boost pickup doesn't exceed 100 HP.
+- [done] Verify power laser fires red and deals 2× damage.
+- [done] Verify missile homes on highest-HP enemy and explodes on hit.
+- [done] Verify boss appears at Level 5 and Level 10 with correct HP scaling.
+- [done] Verify `GameCompleteState` displays after Level 10 boss defeat.
+- [done] Verify triple-shot timer shows 12s bar (not 8s).
+- [done] Verify speed boost timer shows 12s bar (not 8s).
