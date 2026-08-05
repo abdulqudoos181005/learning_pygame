@@ -391,6 +391,7 @@ class PlayState(State):
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=120)
         self.selected_level = max(1, min(int(selected_level), 10))
         self.save_system = SaveSystem()
+        self.kills_since_powerup = 0
         
         # SCREEN SHAKE DOUBLE BUFFERING:
         # We draw the entire game onto a separate offscreen Surface (self.canvas).
@@ -412,6 +413,8 @@ class PlayState(State):
         self.player = Player(self.game, self.game.width // 2, self.game.height - 100)
         self.player_group.add(self.player)
         self.all_sprites.add(self.player)
+        self.player.base_laser_tier = self._laser_tier_for_level(self.selected_level)
+        self.player.activate_invincibility(4.0)
         
         # Game stats
         self.score = 0
@@ -435,6 +438,13 @@ class PlayState(State):
         """Enables screen shake with a specific duration and strength."""
         self.shake_duration  = duration
         self.shake_magnitude = magnitude
+
+    def _laser_tier_for_level(self, level_num):
+        if level_num <= 3:
+            return 1
+        if level_num <= 6:
+            return 2
+        return 3
 
     def handle_events(self, events):
         """Checks for pause triggers (ESC key)."""
@@ -493,13 +503,17 @@ class PlayState(State):
 
             # Check if wave/level is done (all spawned + all killed)
             if self.level_sys.wave_finished_spawning() and len(self.enemies) == 0:
+                cleared_level = self.level_sys.level_number
                 result = self.level_sys.advance_wave()
                 self.wave_intro_timer = 2.5
                 self.boss_active = False
+                self.player.base_laser_tier = self._laser_tier_for_level(self.level_sys.level_number)
                 
                 if result == "level":
                     # Persist any cleared intermediate level so the selector reflects progress.
-                    self.save_system.save_progress(self.level_sys.level_number - 1)
+                    self.save_system.save_progress(cleared_level)
+                    self.game.change_state(LevelCompleteState(self.game, self.score, cleared_level))
+                    return
                 elif result == "complete":
                     self.save_system.save_progress(self.selected_level, completed_levels=list(range(1, 11)))
                     # All 10 levels beaten — show victory screen
@@ -530,6 +544,7 @@ class PlayState(State):
                 # Apply laser damage (power laser = 20, normal = 10). get_hit returns True if enemy dies
                 if enemy.get_hit(laser.damage):
                     self.score += enemy.score_value
+                    self.kills_since_powerup += 1
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
                     
@@ -547,6 +562,7 @@ class PlayState(State):
                 
                 if enemy.get_hit(Missile.DAMAGE):
                     self.score += enemy.score_value
+                    self.kills_since_powerup += 1
                     self._try_drop_powerup(enemy)
 
         # 3. Enemy lasers hitting Player ship
@@ -607,9 +623,11 @@ class PlayState(State):
     def _try_drop_powerup(self, enemy):
         """
         Decides whether a destroyed enemy drops a power-up, and which type.
-        From Level 3 onwards, the extra Sprint 2 powerup types can drop.
+        A guaranteed pity drop is enforced on the third enemy kill since the
+        last power-up reward, while otherwise preserving the normal random roll.
         """
-        if random.random() < 0.15:
+        should_drop = (self.kills_since_powerup >= 3) or (random.random() < 0.15)
+        if should_drop:
             # From level 3+, include the new Sprint 2 powerup types
             if self.level_sys.level_number >= 3:
                 all_types = PowerUp.BASE_TYPES + PowerUp.EXTRA_TYPES
@@ -624,6 +642,7 @@ class PlayState(State):
             pup = PowerUp(self.game, enemy.rect.centerx, enemy.rect.centery, ptype)
             self.powerups.add(pup)
             self.all_sprites.add(pup)
+            self.kills_since_powerup = 0
 
     def draw(self, screen):
         # Draw everything onto the offscreen double-buffer canvas
@@ -940,6 +959,64 @@ class GameOverState(State):
         hint = self.game.assets.hud_font.render("Click SAVE SCORE or press ENTER to View Leaderboard", True, (130, 140, 150))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
         screen.blit(hint, hint_rect)
+
+
+class LevelCompleteState(State):
+    """Short congratulation popup shown immediately after a level clears."""
+    def __init__(self, game, score, cleared_level):
+        super().__init__(game)
+        self.score = score
+        self.cleared_level = int(cleared_level)
+        self.starfield = Starfield(self.game.width, self.game.height, num_stars=100)
+        self.timer = 0.0
+        self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
+        self.continue_hovered = False
+
+    def _continue(self):
+        self.game.change_state(LevelSelectState(self.game))
+
+    def handle_events(self, events):
+        for event in events:
+            if event.type == pg.MOUSEMOTION:
+                self.continue_hovered = self.continue_rect.collidepoint(event.pos)
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.continue_rect.collidepoint(event.pos):
+                    self._continue()
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
+                    self._continue()
+
+    def update(self, dt):
+        self.starfield.update(dt)
+        self.timer += dt
+
+    def draw(self, screen):
+        screen.fill((8, 10, 24))
+        self.starfield.draw(screen)
+
+        title = self.game.assets.title_font.render("CONGRATULATIONS", True, (0, 255, 180))
+        title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 4))
+        screen.blit(title, title_rect)
+
+        level_text = self.game.assets.font.render(f"LEVEL {self.cleared_level} CLEARED", True, (255, 210, 110))
+        level_rect = level_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 20))
+        screen.blit(level_text, level_rect)
+
+        score_text = self.game.assets.font.render(f"SCORE: {self.score}", True, (255, 255, 255))
+        score_rect = score_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 70))
+        screen.blit(score_text, score_rect)
+
+        _draw_ui_button(
+            screen,
+            self.continue_rect,
+            "RETURN TO LEVELS",
+            self.game.assets.font,
+            hovered=self.continue_hovered,
+            fill=(20, 70, 90, 220),
+            border=(0, 255, 255, 255) if self.continue_hovered else (90, 150, 190, 255),
+            text_color=(240, 250, 255),
+            pulse=self.timer * 8,
+        )
 
 
 class GameCompleteState(State):

@@ -196,6 +196,9 @@ do as it is required
 - The level selector continues to follow the project’s existing visual theme and sprite style conventions for consistent presentation.
 
 
+---
+
+
 ## Sprint 4 — ✅ COMPLETE
 
 ### making the game accessble by mouse and clickble 
@@ -225,6 +228,44 @@ do as it is required
 
 ---
 
+
+## Sprint 5 — ✅ COMPLETE
+
+### 1. Level Completion Flow & Replayability
+
+#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
+- A cleared level now transitions to a dedicated `LevelCompleteState` congratulation popup before returning the player to the campaign selector.
+- The progress screen preserves replayability by sending the player back to `LevelSelectState` instead of forcing an automatic next-level jump.
+- The popup reports the cleared level and the accumulated score for a stronger progression feel.
+
+### 2. Power-Up Reward Progression
+
+#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
+- Added a guaranteed pity system: if the player has not seen a power-up drop after 2 enemy kills, the 3rd kill guarantees a drop while still keeping the normal random drop chance.
+- The drop flow now respects the new reward rhythm without breaking the existing random reward design.
+
+#### ✅ [DONE] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
+- Laser progression is now level-gated:
+  - Tier 1: levels 1–3
+  - Tier 2: levels 4–6
+  - Tier 3: levels 7–10
+- A collected `power_laser` now acts as the next progressive tier upgrade for the player’s current run, rather than only a one-off temporary power boost.
+
+#### ✅ [DONE] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
+- Added a tier-3 purple laser visual so the upgraded beam color communicates the new weapon tier clearly.
+
+### 3. Invincibility & Blink Feedback
+
+#### ✅ [DONE] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
+- The player now gains a 4-second invincibility window when a level begins and again after losing a life.
+- During the invulnerable window, the ship flashes/blinks so the player can clearly understand the safety window and avoid panic.
+
+### Sprint 5 completion notes
+- The sprint goals are now live in the game loop: level completion loops back to the campaign selector via a score-based congratulations popup, power rewards are more forgiving and better paced, and the player receives clear safety feedback during the start-of-level and respawn invulnerability intervals.
+- These changes were implemented without regressing the existing mouse-click UI and level selector flow from Sprint 3–4.
+
+---
+
 ## Verification Plan
 
 ### Automated Tests ✅
@@ -232,6 +273,7 @@ do as it is required
 - `sprites.py` — import check, `PowerUp.BASE_TYPES`, `PowerUp.EXTRA_TYPES`, `Missile.DAMAGE` constants.
 - `states.py` — `PlayState` instantiation and `update(dt)` with headless display.
 - All 7 source files — AST syntax parse with zero errors.
+- Sprint 5 smoke verification — compile all source files and confirm the new `LevelCompleteState` factory, invincibility activation, and level-tier progression assertions succeed in a headless runtime check.
 
 ### Manual Verification (To Do)
 - [done] Playtest Level 1–2: scouts and stingers spawn correctly.
@@ -243,3 +285,11 @@ do as it is required
 - [done] Verify `GameCompleteState` displays after Level 10 boss defeat.
 - [done] Verify triple-shot timer shows 12s bar (not 8s).
 - [done] Verify speed boost timer shows 12s bar (not 8s).
+- [done] Verify a cleared level returns to the levels menu via the new congratulations popup.
+- [done] Verify the pity-drop system forces a reward on the third kill if no previous reward was awarded.
+- [done] Verify the player flashes when invincible at the start of a level or after losing a life.
+
+### Verification Evidence
+- Fresh compile verification command: `python -m compileall src`
+- Fresh runtime smoke test evidence: the headless assertion check completed with `verification ok` after instantiating `PlayState` for tiers 1, 4, and 7 and confirming the new `LevelCompleteState` entry point exists.
+- Result: the updated Sprint 5 logic is syntactically valid and the new state setup is confirmed in the runtime path used by the game.

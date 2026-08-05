@@ -174,6 +174,12 @@ class AssetsLoader:
             pg.draw.rect(surf, (220, 0, 0),     (w // 2 - 3, 0, 6, h), border_radius=2)
             pg.draw.rect(surf, (255, 180, 50),  (w // 2 - 1, 2, 2, h - 4), border_radius=1)
 
+        elif name == "laser_tier3":
+            # Tier-3 laser: thicker purple beam with bright white-cyan core
+            surf = pg.Surface((w, h), pg.SRCALPHA)
+            pg.draw.rect(surf, (128, 0, 255),   (w // 2 - 4, 0, 8, h), border_radius=3)
+            pg.draw.rect(surf, (210, 210, 255), (w // 2 - 1, 2, 2, h - 4), border_radius=1)
+
         elif name == "laser_boss":
             # Boss heavy projectile: thick glowing green plasma beam
             surf = pg.Surface((w, h), pg.SRCALPHA)

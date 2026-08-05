@@ -7,7 +7,8 @@ class Player(pg.sprite.Sprite):
     def __init__(self, game, x, y):
         super().__init__()
         self.game = game
-        self.image = self.game.assets.get_image("player", 60, 60)
+        self.base_image = self.game.assets.get_image("player", 60, 60)
+        self.image = self.base_image.copy()
         self.rect = self.image.get_rect(center=(x, y))
         
         # Stats
@@ -17,21 +18,37 @@ class Player(pg.sprite.Sprite):
         self.max_shield = 100
         self.shield = 0  # Starts at 0, goes up with Shield PowerUp
         self.lives = 3
+        self.invincible_timer = 0.0
+        self.flash_timer = 0.0
         
         # Weapon properties
         self.shoot_cooldown = 0.25 # seconds
         self.shoot_timer = 0.0
+        self.base_laser_tier = 1
         
         # Power-up states (Sprint 2: triple-shot & speed timers increased to 12s)
         self.triple_shot_timer = 0.0
         self.speed_boost_timer = 0.0
         self.shield_active = False
-        self.laser_power_timer = 0.0   # Power laser: 2x damage, red color (10s)
+        self.laser_power_timer = 0.0   # Power laser: next-tier boost for 10s
         self.missile_count = 0         # Stored homing missiles (activated by M key)
         self.missile_cooldown = 0.0    # Prevent spamming missiles
 
+    def _effective_laser_tier(self):
+        """Return the currently active weapon tier after applying any power-laser pickup bonus."""
+        if self.laser_power_timer > 0:
+            return min(3, max(self.base_laser_tier, self.base_laser_tier + 1))
+        return self.base_laser_tier
+
+    def activate_invincibility(self, duration=4.0):
+        self.invincible_timer = max(self.invincible_timer, duration)
+        self.flash_timer = 0.0
+
     def get_hit(self, damage):
         """Handle damage to player ship, affecting shield first then health."""
+        if self.invincible_timer > 0:
+            return False
+
         if self.shield > 0:
             self.shield -= damage
             if self.shield < 0:
@@ -48,6 +65,7 @@ class Player(pg.sprite.Sprite):
             self.lives -= 1
             self.health = self.max_health
             self.shield = 0
+            self.activate_invincibility(4.0)
             # Reset position
             self.rect.center = (self.game.width // 2, self.game.height - 80)
             return True # Died
@@ -65,6 +83,14 @@ class Player(pg.sprite.Sprite):
             self.laser_power_timer -= dt
         if self.missile_cooldown > 0:
             self.missile_cooldown -= dt
+        if self.invincible_timer > 0:
+            self.invincible_timer -= dt
+            self.flash_timer += dt
+            if self.flash_timer >= 0.12:
+                self.flash_timer = 0.0
+                self.image.set_alpha(90 if self.image.get_alpha() > 120 else 255)
+        else:
+            self.image.set_alpha(255)
             
         self.shield_active = self.shield > 0
 
@@ -121,10 +147,12 @@ class Player(pg.sprite.Sprite):
             if not hasattr(state, 'player_lasers'):
                 return
             
-            # Power laser: 2x damage, red tint
-            is_power = self.laser_power_timer > 0
-            laser_dmg = 20 if is_power else 10
-            img_name  = "laser_power" if is_power else "laser_player"
+            # Progressive laser tiers: level-based baseline plus pickup bonus
+            tier = self._effective_laser_tier()
+            laser_damage_by_tier = {1: 10, 2: 20, 3: 30}
+            laser_image_by_tier = {1: "laser_player", 2: "laser_power", 3: "laser_tier3"}
+            laser_dmg = laser_damage_by_tier[tier]
+            img_name  = laser_image_by_tier[tier]
                 
             if self.triple_shot_timer > 0:
                 # Fire 3 lasers (center, diagonal-left, diagonal-right)
