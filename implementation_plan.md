@@ -190,7 +190,26 @@ do as it is required
 -> should use the same style of sprites as the other game objects (player, enemy, powerups, etc.)
 
 
+## Sprint 4
 
+### making the game accessble by mouse and clickble 
+[description]: now in this sprint we are going to make the UI elements be clickble buttons 
+
+### changes
+-> making the main menu buttons be clickble
+-> making the leaderboard escape button clickble
+-> making the pause menu buttons be clickble 
+[NOTE] future any changes in UI or addition of any other UI component remember to make them acessble by the mouse too (clickble)
+
+[NOTE] you are going to make sure no other funtionaltiy is being compromised and follow the instructions throughly
+
+## MODIFICATIONS of sprint 4:
+-Make the tiles un-acessble via enter if the cursor is not hovering.
+-make the leadboard's and level's "menu" button more interactive (changes color upon hovering). 
+-fix the bug for the current highest level hover effect (currently upon hovering once it remain in the same state even when the cursor is not upon it). 
+-make the passed level button interactive too (changes color upon hovering). 
+-make the box/borders of the main menu buttons be allinged as currently they are not bcz of unknown dot infront of them.
+-add some little animation for each click/hover to make it look more engaging/interactive 
 
 
 ---

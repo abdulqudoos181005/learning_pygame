@@ -49,30 +49,59 @@ class MenuState(State):
         # Available choices and navigation cursor index
         self.options = ["Play Game", "High Scores", "Quit"]
         self.selected_index = 0
+        self.hovered_index = None
+        self.buttons = []
+        self._build_buttons()
+
+    def _build_buttons(self):
+        self.buttons = []
+        for idx, option in enumerate(self.options):
+            text_surf = self.game.assets.font.render(option, True, (255, 255, 255))
+            rect = text_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + idx * 45))
+            rect.width += 40
+            rect.height += 14
+            rect.centerx = self.game.width // 2
+            self.buttons.append({"label": option, "rect": rect})
 
     def handle_events(self, events):
-        """Navigates options using the keyboard."""
+        """Navigates options using the keyboard or a mouse click."""
         for event in events:
-            if event.type == pg.KEYDOWN:
+            if event.type == pg.MOUSEMOTION:
+                self.hovered_index = None
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(event.pos):
+                        self.hovered_index = idx
+                        self.selected_index = idx
+                        break
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(event.pos):
+                        self.selected_index = idx
+                        self._select_option(idx)
+                        return
+            elif event.type == pg.KEYDOWN:
                 # W or UP arrow goes up
                 if event.key == pg.K_UP or event.key == pg.K_w:
                     self.selected_index = (self.selected_index - 1) % len(self.options)
+                    self.hovered_index = None
                 # S or DOWN arrow goes down
                 elif event.key == pg.K_DOWN or event.key == pg.K_s:
                     self.selected_index = (self.selected_index + 1) % len(self.options)
+                    self.hovered_index = None
                 # ENTER or SPACE selects the currently highlighted option
                 elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
-                    self._select_option()
+                    self._select_option(self.selected_index)
 
-    def _select_option(self):
+    def _select_option(self, idx=None):
         """Executes the action corresponding to the highlighted option."""
-        if self.selected_index == 0:
-            # Transition to active gameplay
-            self.game.change_state(PlayState(self.game))
-        elif self.selected_index == 1:
+        idx = self.selected_index if idx is None else idx
+        if idx == 0:
+            # Transition to the new level-selection screen before active gameplay.
+            self.game.change_state(LevelSelectState(self.game))
+        elif idx == 1:
             # Transition to high scores leaderboard
             self.game.change_state(HighScoresState(self.game))
-        elif self.selected_index == 2:
+        elif idx == 2:
             # Exit game
             self.game.quit()
 
@@ -94,16 +123,27 @@ class MenuState(State):
         screen.blit(self.title_text, self.title_rect)
         
         # Draw menu options list
-        for idx, option in enumerate(self.options):
+        for idx, button in enumerate(self.buttons):
+            option = button["label"]
+            rect = button["rect"]
             is_sel = (idx == self.selected_index)
-            # Highlight selected option with Cyan, else show in muted slate-blue
+            is_hovered = self.hovered_index == idx
             color = (0, 255, 255) if is_sel else (120, 140, 160)
+            if is_hovered:
+                color = (120, 255, 255)
             prefix = "▶  " if is_sel else "   "
             
             text_surf = self.game.assets.font.render(f"{prefix}{option}", True, color)
-            # Place options stacked vertically, separated by 45 pixels
-            rect = text_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + idx * 45))
-            screen.blit(text_surf, rect)
+            panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+            fill = (24, 34, 54, 200) if not is_sel else (18, 90, 110, 230)
+            if is_hovered:
+                fill = (20, 100, 125, 230)
+            panel.fill(fill)
+            pg.draw.rect(panel, (80, 120, 150, 230), panel.get_rect(), 1, border_radius=10)
+            if is_sel:
+                pg.draw.rect(panel, (0, 255, 255, 190), panel.get_rect(), 2, border_radius=10)
+            screen.blit(panel, rect)
+            screen.blit(text_surf, text_surf.get_rect(center=rect.center))
 
         # Draw controller instruction banner at the bottom
         controls_text = self.game.assets.hud_font.render(
@@ -111,6 +151,158 @@ class MenuState(State):
         )
         controls_rect = controls_text.get_rect(center=(self.game.width // 2, self.game.height - 40))
         screen.blit(controls_text, controls_rect)
+
+
+class LevelSelectState(State):
+    """Interactive campaign-level chooser with mouse + keyboard support."""
+    def __init__(self, game):
+        super().__init__(game)
+        self.starfield = Starfield(self.game.width, self.game.height, num_stars=100)
+        self.save_system = SaveSystem()
+        self.progress = self.save_system.load_progress()
+        self.hovered_index = None
+        self.selected_index = 0
+        self.buttons = []
+        self.blink_timer = 0.0
+        self._build_buttons()
+
+    def _build_buttons(self):
+        self.buttons = []
+        highest_unlocked = self.progress.get("highest_unlocked", 1)
+        completed_levels = set(self.progress.get("completed_levels", []))
+
+        for level_num in range(1, 11):
+            row = (level_num - 1) // 5
+            col = (level_num - 1) % 5
+            x = 130 + col * 220
+            y = 180 + row * 150
+            rect = pg.Rect(x, y, 160, 90)
+            is_unlocked = level_num <= highest_unlocked
+            is_completed = level_num in completed_levels
+            self.buttons.append({
+                "level": level_num,
+                "rect": rect,
+                "unlocked": is_unlocked,
+                "completed": is_completed,
+            })
+
+    def handle_events(self, events):
+        for event in events:
+            if event.type == pg.MOUSEMOTION:
+                mouse_pos = event.pos
+                self.hovered_index = None
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(mouse_pos):
+                        self.hovered_index = idx
+                        self.selected_index = idx
+                        break
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = event.pos
+                back_rect = pg.Rect(40, 40, 100, 48)
+                if back_rect.collidepoint(mouse_pos):
+                    self.game.change_state(MenuState(self.game))
+                    return
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(mouse_pos):
+                        self.selected_index = idx
+                        self._launch_level(button["level"])
+                        return
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_ESCAPE, pg.K_BACKSPACE):
+                    self.game.change_state(MenuState(self.game))
+                elif event.key in (pg.K_UP, pg.K_w):
+                    self._move_selection(-5)
+                elif event.key in (pg.K_DOWN, pg.K_s):
+                    self._move_selection(5)
+                elif event.key in (pg.K_LEFT, pg.K_a):
+                    self._move_selection(-1)
+                elif event.key in (pg.K_RIGHT, pg.K_d):
+                    self._move_selection(1)
+                elif event.key in (pg.K_RETURN, pg.K_SPACE):
+                    level_num = self.buttons[self.selected_index]["level"]
+                    if self.buttons[self.selected_index]["unlocked"]:
+                        self._launch_level(level_num)
+
+    def _move_selection(self, delta):
+        next_idx = self.selected_index + delta
+        if 0 <= next_idx < len(self.buttons):
+            self.selected_index = next_idx
+            self.hovered_index = next_idx
+
+    def _launch_level(self, level_num):
+        if level_num <= self.progress.get("highest_unlocked", 1):
+            self.game.change_state(PlayState(self.game, selected_level=level_num))
+
+    def update(self, dt):
+        self.starfield.update(dt)
+        self.blink_timer += dt
+
+    def draw(self, screen):
+        screen.fill((8, 10, 24))
+        self.starfield.draw(screen)
+
+        title = self.game.assets.title_font.render("LEVELS", True, (0, 240, 255))
+        title_rect = title.get_rect(center=(self.game.width // 2, 100))
+        screen.blit(title, title_rect)
+
+        # Exit arrow to return to the menu.
+        back_rect = pg.Rect(40, 40, 100, 48)
+        back_text = self.game.assets.font.render("← MENU", True, (190, 210, 220))
+        back_surface = pg.Surface((back_rect.width, back_rect.height), pg.SRCALPHA)
+        back_surface.fill((30, 40, 58, 190))
+        pg.draw.rect(back_surface, (90, 120, 150), back_surface.get_rect(), 1, border_radius=6)
+        screen.blit(back_surface, back_rect)
+        screen.blit(back_text, back_text.get_rect(center=back_rect.center))
+
+        mouse_pos = pg.mouse.get_pos()
+        if back_rect.collidepoint(mouse_pos):
+            pg.draw.rect(screen, (90, 140, 180), back_rect, 1, border_radius=6)
+
+        for idx, button in enumerate(self.buttons):
+            rect = button["rect"]
+            unlocked = button["unlocked"]
+            completed = button["completed"]
+            hovered = self.hovered_index == idx or self.selected_index == idx
+            blink = idx == (self.progress.get("highest_unlocked", 1) - 1) and self.blink_timer % 1.0 < 0.5
+
+            fill = (35, 70, 100)
+            border = (70, 160, 210)
+            if not unlocked:
+                fill = (40, 42, 50)
+                border = (90, 90, 100)
+            elif completed:
+                fill = (26, 86, 42)
+                border = (80, 255, 140)
+            elif hovered:
+                fill = (20, 110, 130)
+                border = (0, 255, 255)
+
+            if unlocked and blink:
+                fill = (20, 130, 120)
+                border = (180, 255, 255)
+
+            panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+            panel.fill((0, 0, 0, 0))
+            pg.draw.rect(panel, fill, panel.get_rect(), border_radius=10)
+            pg.draw.rect(panel, border, panel.get_rect(), 2, border_radius=10)
+            screen.blit(panel, rect)
+
+            label = self.game.assets.hud_font.render(f"LEVEL {button['level']}", True, (255, 255, 255))
+            screen.blit(label, label.get_rect(center=rect.center))
+
+            if completed:
+                done_tag = self.game.assets.font.render("CLEARED", True, (200, 255, 210))
+                screen.blit(done_tag, done_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+            elif not unlocked:
+                lock_tag = self.game.assets.font.render("LOCKED", True, (190, 190, 200))
+                screen.blit(lock_tag, lock_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+            else:
+                status_tag = self.game.assets.font.render("PLAY", True, (0, 240, 255))
+                screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+
+        hint = self.game.assets.font.render("Click a level or use arrows + ENTER", True, (120, 140, 160))
+        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 60))
+        screen.blit(hint, hint_rect)
 
 
 class PlayState(State):
@@ -121,10 +313,12 @@ class PlayState(State):
     new Sprint 2 types), homing missiles, particles, collisions,
     screen shaking, and the heads-up display (HUD).
     """
-    def __init__(self, game):
+    def __init__(self, game, selected_level=1):
         super().__init__(game)
         # Background starfield (higher density of stars for active speed feel)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=120)
+        self.selected_level = max(1, min(int(selected_level), 10))
+        self.save_system = SaveSystem()
         
         # SCREEN SHAKE DOUBLE BUFFERING:
         # We draw the entire game onto a separate offscreen Surface (self.canvas).
@@ -151,7 +345,7 @@ class PlayState(State):
         self.score = 0
         
         # Sprint 2: LevelSystem drives all wave/level progression
-        self.level_sys = LevelSystem()
+        self.level_sys = LevelSystem(starting_level=self.selected_level)
         
         # Intro banner timing (shows "LEVEL X - WAVE Y" or "BOSS INCOMING")
         self.wave_intro_timer = 2.5
@@ -231,7 +425,11 @@ class PlayState(State):
                 self.wave_intro_timer = 2.5
                 self.boss_active = False
                 
-                if result == "complete":
+                if result == "level":
+                    # Persist any cleared intermediate level so the selector reflects progress.
+                    self.save_system.save_progress(self.level_sys.level_number - 1)
+                elif result == "complete":
+                    self.save_system.save_progress(self.selected_level, completed_levels=list(range(1, 11)))
                     # All 10 levels beaten — show victory screen
                     self.game.change_state(GameCompleteState(self.game, self.score))
                     return
@@ -498,15 +696,38 @@ class PauseState(State):
         super().__init__(game)
         # Store references to frozen state to allow resuming later
         self.previous_state = previous_state
+        self.hovered_index = None
+        self.buttons = []
+        self._build_buttons()
         
         # Transparent dark overlay cover
         self.overlay = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
         self.overlay.fill((10, 12, 22, 200)) # Dark tint with 200 alpha
 
+    def _build_buttons(self):
+        self.buttons = [
+            {"label": "RESUME", "rect": pg.Rect(self.game.width // 2 - 110, self.game.height // 2 - 25, 220, 56)},
+            {"label": "QUIT TO MENU", "rect": pg.Rect(self.game.width // 2 - 140, self.game.height // 2 + 45, 280, 56)},
+        ]
+
     def handle_events(self, events):
-        """Allows resuming or quitting back to Menu State."""
+        """Allows resuming or quitting back to Menu State using mouse or keyboard."""
         for event in events:
-            if event.type == pg.KEYDOWN:
+            if event.type == pg.MOUSEMOTION:
+                self.hovered_index = None
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(event.pos):
+                        self.hovered_index = idx
+                        break
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                for idx, button in enumerate(self.buttons):
+                    if button["rect"].collidepoint(event.pos):
+                        if idx == 0:
+                            self.game.change_state(self.previous_state)
+                        else:
+                            self.game.change_state(MenuState(self.game))
+                        return
+            elif event.type == pg.KEYDOWN:
                 # ESC or SPACE returns back to the active gameplay state
                 if event.key == pg.K_ESCAPE or event.key == pg.K_SPACE:
                     self.game.change_state(self.previous_state)
@@ -525,14 +746,25 @@ class PauseState(State):
         title = self.game.assets.title_font.render("GAME PAUSED", True, (255, 200, 0))
         title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 3))
         screen.blit(title, title_rect)
+
+        for idx, button in enumerate(self.buttons):
+            rect = button["rect"]
+            hovered = self.hovered_index == idx
+            fill = (20, 30, 44, 220)
+            border = (90, 120, 150)
+            if hovered:
+                fill = (24, 88, 105, 240)
+                border = (0, 255, 255)
+            panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+            panel.fill(fill)
+            pg.draw.rect(panel, border, panel.get_rect(), 2, border_radius=10)
+            screen.blit(panel, rect)
+            label = self.game.assets.font.render(button["label"], True, (240, 240, 240))
+            screen.blit(label, label.get_rect(center=rect.center))
         
-        hint = self.game.assets.font.render("Press SPACE / ESC to Resume", True, (220, 220, 220))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height // 2))
+        hint = self.game.assets.font.render("Press SPACE / ESC to Resume   |   Q to Quit", True, (220, 220, 220))
+        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height // 2 + 120))
         screen.blit(hint, hint_rect)
-        
-        quit_hint = self.game.assets.font.render("Press Q to Quit to Main Menu", True, (130, 150, 160))
-        quit_rect = quit_hint.get_rect(center=(self.game.width // 2, self.game.height // 2 + 50))
-        screen.blit(quit_hint, quit_rect)
 
 
 class GameOverState(State):
@@ -624,9 +856,9 @@ class GameCompleteState(State):
         for event in events:
             if event.type == pg.KEYDOWN:
                 if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
-                    # Auto-save with name "PILOT" and go to leaderboard
+                    # Auto-save with name "VICTOR" and return to campaign selection.
                     self.save_system.save_score("VICTOR", self.score)
-                    self.game.change_state(HighScoresState(self.game))
+                    self.game.change_state(LevelSelectState(self.game))
 
     def update(self, dt):
         self.starfield.update(dt)
@@ -662,11 +894,19 @@ class HighScoresState(State):
         super().__init__(game)
         self.save_system = SaveSystem()
         self.scores_list = self.save_system.load_scores()
+        self.back_rect = pg.Rect(40, 40, 120, 48)
+        self.back_hovered = False
 
     def handle_events(self, events):
-        """Allows returning back to the Main Menu."""
+        """Allows returning back to the Main Menu with mouse or keyboard."""
         for event in events:
-            if event.type == pg.KEYDOWN:
+            if event.type == pg.MOUSEMOTION:
+                self.back_hovered = self.back_rect.collidepoint(event.pos)
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.back_rect.collidepoint(event.pos):
+                    self.game.change_state(MenuState(self.game))
+                    return
+            elif event.type == pg.KEYDOWN:
                 if event.key in (pg.K_ESCAPE, pg.K_RETURN, pg.K_SPACE):
                     self.game.change_state(MenuState(self.game))
 
@@ -678,6 +918,13 @@ class HighScoresState(State):
         title = self.game.assets.title_font.render("HIGH SCORES", True, (0, 200, 255))
         title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 6))
         screen.blit(title, title_rect)
+
+        back_surface = pg.Surface((self.back_rect.width, self.back_rect.height), pg.SRCALPHA)
+        back_surface.fill((30, 40, 58, 190))
+        pg.draw.rect(back_surface, (90, 140, 180) if self.back_hovered else (90, 120, 150), back_surface.get_rect(), 1, border_radius=6)
+        screen.blit(back_surface, self.back_rect)
+        back_text = self.game.assets.font.render("← MENU", True, (190, 210, 220))
+        screen.blit(back_text, back_text.get_rect(center=self.back_rect.center))
         
         # Draw high scores in a formatted 3-column table
         for idx, item in enumerate(self.scores_list[:10]):
@@ -699,6 +946,6 @@ class HighScoresState(State):
             screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
             
         # Return instructions
-        hint = self.game.assets.font.render("Press ESC/SPACE to Main Menu", True, (100, 120, 140))
+        hint = self.game.assets.font.render("Mouse click the MENU button or press ESC/SPACE", True, (100, 120, 140))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
         screen.blit(hint, hint_rect)

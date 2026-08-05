@@ -141,12 +141,20 @@ class LevelSystem:
     keeping the state itself clean and free of hardcoded level logic.
     """
 
-    def __init__(self):
-        self.level_index = 0         # 0-based index into LEVEL_CONFIGS
+    def __init__(self, starting_level=1):
+        self.level_index = max(0, min(starting_level - 1, len(LEVEL_CONFIGS) - 1))
         self.wave_index  = 0         # 0-based index into current level's waves list
         self.spawned     = 0         # Enemies spawned in the current wave so far
         self.spawn_timer = 0.0       # Countdown until next spawn
         self.complete    = False     # True after Level 10 boss is defeated
+        self._load_wave()
+
+    def start_level(self, level_number):
+        """Reset the system so a selected level becomes the new campaign entry point."""
+        level_number = max(1, min(int(level_number), len(LEVEL_CONFIGS)))
+        self.level_index = level_number - 1
+        self.wave_index = 0
+        self.complete = False
         self._load_wave()
 
     @property
