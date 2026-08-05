@@ -164,7 +164,7 @@ New procedural images added:
 
 ---
 
-## Sprint 3 
+## Sprint 3 — ✅ COMPLETE
 
 ### new game state (UI for levels)
 [description]  a state or a new screen where a player can select the level which appears after clicking "Play Game" in the main menu and the user is directed to after beating every level 
@@ -189,8 +189,14 @@ do as it is required
 ### sprites 
 -> should use the same style of sprites as the other game objects (player, enemy, powerups, etc.)
 
+### Sprint 3 completion notes
+- The level-select screen is implemented as a dedicated interactive UI state that opens after clicking the main menu play action and can also be reached from the game-complete flow.
+- The selector uses a 2×5 grid layout with a visible `LEVELS` banner, per-level status colors, soft blinking for the current highest unlocked level, and a menu back control.
+- The level tiles are mouse-clickable and hover-aware, while preserving replayability by allowing levels to be replayed multiple times.
+- The level selector continues to follow the project’s existing visual theme and sprite style conventions for consistent presentation.
 
-## Sprint 4
+
+## Sprint 4 — ✅ COMPLETE
 
 ### making the game accessble by mouse and clickble 
 [description]: now in this sprint we are going to make the UI elements be clickble buttons 
@@ -203,13 +209,18 @@ do as it is required
 
 [NOTE] you are going to make sure no other funtionaltiy is being compromised and follow the instructions throughly
 
-## MODIFICATIONS of sprint 4:
--Make the tiles un-acessble via enter if the cursor is not hovering.
--make the leadboard's and level's "menu" button more interactive (changes color upon hovering). 
--fix the bug for the current highest level hover effect (currently upon hovering once it remain in the same state even when the cursor is not upon it). 
--make the passed level button interactive too (changes color upon hovering). 
--make the box/borders of the main menu buttons be allinged as currently they are not bcz of unknown dot infront of them.
--add some little animation for each click/hover to make it look more engaging/interactive 
+## MODIFICATIONS of sprint 4: ✅ COMPLETE
+-Make the tiles un-acessble via enter if the cursor is not hovering. *(completed)*
+-make the leadboard's and level's "menu" button more interactive (changes color upon hovering). *(completed)*
+-fix the bug for the current highest level hover effect (currently upon hovering once it remain in the same state even when the cursor is not upon it). *(completed)*
+-make the passed level button interactive too (changes color upon hovering). *(completed)*
+-make the box/borders of the main menu buttons be allinged as currently they are not bcz of unknown dot infront of them. *(completed)*
+-add some little animation for each click/hover to make it look more engaging/interactive *(completed)*
+
+### Sprint 4 completion notes
+- Shared mouse-friendly button rendering now powers the main menu, pause menu, leaderboard back button, and end-state confirmations.
+- The level selector now resets stale hover state when the cursor leaves a tile, and keyboard `Enter` only launches a level when there is a valid hover target.
+- All sprint-4 requested polish items were implemented without compromising existing gameplay flow.
 
 
 ---

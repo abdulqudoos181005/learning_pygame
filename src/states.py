@@ -7,6 +7,49 @@ from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
 from level_system import LevelSystem
 
+
+def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
+                    fill=(22, 34, 56, 220), border=(90, 120, 150, 255),
+                    text_color=(240, 240, 240), pulse=0.0):
+    """Shared helper for consistent, mouse-friendly arcade buttons.
+
+    All future UI elements can reuse this helper so hover and click feedback
+    stays visually uniform without duplicating the button drawing logic.
+    """
+    panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+    panel.fill((0, 0, 0, 0))
+
+    fill_r, fill_g, fill_b, fill_a = fill
+    border_r, border_g, border_b, border_a = border
+
+    if hovered:
+        fill_r = min(255, fill_r + 22)
+        fill_g = min(255, fill_g + 36)
+        fill_b = min(255, fill_b + 42)
+        border_r = min(255, border_r + 20)
+        border_g = min(255, border_g + 40)
+        border_b = min(255, border_b + 60)
+
+    if pressed:
+        fill_r = max(0, fill_r - 14)
+        fill_g = max(0, fill_g - 12)
+        fill_b = max(0, fill_b - 18)
+        border_r = min(255, border_r + 24)
+        border_g = min(255, border_g + 40)
+        border_b = min(255, border_b + 50)
+
+    pulse_alpha = int(fill_a + (24 * math.sin(pulse) if pulse else 0))
+    panel.fill((fill_r, fill_g, fill_b, max(0, min(255, pulse_alpha))))
+    pg.draw.rect(panel, (border_r, border_g, border_b, border_a), panel.get_rect(), 2, border_radius=10)
+    screen.blit(panel, rect)
+
+    label_surf = font.render(label, True, text_color)
+    label_rect = label_surf.get_rect(center=rect.center)
+    if pressed:
+        label_rect.move_ip(1, 2)
+    screen.blit(label_surf, label_rect)
+
+
 class State:
     """
     The abstract base class representing a generic Game State (State Pattern).
@@ -41,6 +84,9 @@ class MenuState(State):
         super().__init__(game)
         # Parallax background with 80 stars for the menu
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=80)
+        self.anim_timer = 0.0
+        self.click_timer = 0.0
+        self.click_index = None
         
         # Render the menu title with a nice neon-cyan color
         self.title_text = self.game.assets.title_font.render("SPACE SHOOTERS", True, (0, 255, 200))
@@ -56,11 +102,7 @@ class MenuState(State):
     def _build_buttons(self):
         self.buttons = []
         for idx, option in enumerate(self.options):
-            text_surf = self.game.assets.font.render(option, True, (255, 255, 255))
-            rect = text_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + idx * 45))
-            rect.width += 40
-            rect.height += 14
-            rect.centerx = self.game.width // 2
+            rect = pg.Rect(self.game.width // 2 - 170, self.game.height // 2 - 15 + idx * 55, 340, 46)
             self.buttons.append({"label": option, "rect": rect})
 
     def handle_events(self, events):
@@ -77,6 +119,8 @@ class MenuState(State):
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
                         self.selected_index = idx
+                        self.click_index = idx
+                        self.click_timer = 0.12
                         self._select_option(idx)
                         return
             elif event.type == pg.KEYDOWN:
@@ -90,6 +134,8 @@ class MenuState(State):
                     self.hovered_index = None
                 # ENTER or SPACE selects the currently highlighted option
                 elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
+                    self.click_index = self.selected_index
+                    self.click_timer = 0.12
                     self._select_option(self.selected_index)
 
     def _select_option(self, idx=None):
@@ -106,8 +152,13 @@ class MenuState(State):
             self.game.quit()
 
     def update(self, dt):
-        """Scroll the background stars."""
+        """Scroll the background stars and animate menu hover pulses."""
         self.starfield.update(dt)
+        self.anim_timer += dt
+        if self.click_timer > 0:
+            self.click_timer -= dt
+            if self.click_timer <= 0:
+                self.click_index = None
 
     def draw(self, screen):
         # Clear screen with a very deep cosmic blue background
@@ -128,22 +179,35 @@ class MenuState(State):
             rect = button["rect"]
             is_sel = (idx == self.selected_index)
             is_hovered = self.hovered_index == idx
-            color = (0, 255, 255) if is_sel else (120, 140, 160)
-            if is_hovered:
+            is_pressed = self.click_index == idx and self.click_timer > 0
+            color = (0, 255, 255) if is_sel else (190, 220, 240)
+            if is_hovered or is_sel:
                 color = (120, 255, 255)
-            prefix = "▶  " if is_sel else "   "
-            
-            text_surf = self.game.assets.font.render(f"{prefix}{option}", True, color)
-            panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
-            fill = (24, 34, 54, 200) if not is_sel else (18, 90, 110, 230)
+
+            fill = (22, 34, 56, 220)
+            border = (100, 130, 160, 255)
             if is_hovered:
-                fill = (20, 100, 125, 230)
-            panel.fill(fill)
-            pg.draw.rect(panel, (80, 120, 150, 230), panel.get_rect(), 1, border_radius=10)
+                fill = (24, 94, 116, 240)
+                border = (0, 255, 255, 255)
             if is_sel:
-                pg.draw.rect(panel, (0, 255, 255, 190), panel.get_rect(), 2, border_radius=10)
-            screen.blit(panel, rect)
-            screen.blit(text_surf, text_surf.get_rect(center=rect.center))
+                fill = (18, 86, 108, 250)
+                border = (0, 255, 255, 255)
+            if is_pressed:
+                fill = (12, 40, 84, 255)
+                border = (180, 255, 255, 255)
+
+            _draw_ui_button(
+                screen,
+                rect,
+                option,
+                self.game.assets.font,
+                hovered=is_hovered,
+                pressed=is_pressed,
+                fill=fill,
+                border=border,
+                text_color=color,
+                pulse=self.anim_timer * 8 + idx,
+            )
 
         # Draw controller instruction banner at the bottom
         controls_text = self.game.assets.hud_font.render(
@@ -164,6 +228,8 @@ class LevelSelectState(State):
         self.selected_index = 0
         self.buttons = []
         self.blink_timer = 0.0
+        self.back_rect = pg.Rect(40, 40, 100, 48)
+        self.back_hovered = False
         self._build_buttons()
 
     def _build_buttons(self):
@@ -190,6 +256,7 @@ class LevelSelectState(State):
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 mouse_pos = event.pos
+                self.back_hovered = self.back_rect.collidepoint(mouse_pos)
                 self.hovered_index = None
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(mouse_pos):
@@ -198,8 +265,7 @@ class LevelSelectState(State):
                         break
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = event.pos
-                back_rect = pg.Rect(40, 40, 100, 48)
-                if back_rect.collidepoint(mouse_pos):
+                if self.back_rect.collidepoint(mouse_pos):
                     self.game.change_state(MenuState(self.game))
                     return
                 for idx, button in enumerate(self.buttons):
@@ -219,15 +285,17 @@ class LevelSelectState(State):
                 elif event.key in (pg.K_RIGHT, pg.K_d):
                     self._move_selection(1)
                 elif event.key in (pg.K_RETURN, pg.K_SPACE):
-                    level_num = self.buttons[self.selected_index]["level"]
-                    if self.buttons[self.selected_index]["unlocked"]:
-                        self._launch_level(level_num)
+                    # Keyboard Enter can only launch a level if the mouse is currently hovering a tile.
+                    if self.hovered_index is not None:
+                        level_num = self.buttons[self.hovered_index]["level"]
+                        if self.buttons[self.hovered_index]["unlocked"]:
+                            self._launch_level(level_num)
 
     def _move_selection(self, delta):
         next_idx = self.selected_index + delta
         if 0 <= next_idx < len(self.buttons):
             self.selected_index = next_idx
-            self.hovered_index = next_idx
+            self.hovered_index = None
 
     def _launch_level(self, level_num):
         if level_num <= self.progress.get("highest_unlocked", 1):
@@ -246,23 +314,23 @@ class LevelSelectState(State):
         screen.blit(title, title_rect)
 
         # Exit arrow to return to the menu.
-        back_rect = pg.Rect(40, 40, 100, 48)
-        back_text = self.game.assets.font.render("← MENU", True, (190, 210, 220))
-        back_surface = pg.Surface((back_rect.width, back_rect.height), pg.SRCALPHA)
-        back_surface.fill((30, 40, 58, 190))
-        pg.draw.rect(back_surface, (90, 120, 150), back_surface.get_rect(), 1, border_radius=6)
-        screen.blit(back_surface, back_rect)
-        screen.blit(back_text, back_text.get_rect(center=back_rect.center))
-
-        mouse_pos = pg.mouse.get_pos()
-        if back_rect.collidepoint(mouse_pos):
-            pg.draw.rect(screen, (90, 140, 180), back_rect, 1, border_radius=6)
+        _draw_ui_button(
+            screen,
+            self.back_rect,
+            "← MENU",
+            self.game.assets.font,
+            hovered=self.back_hovered,
+            fill=(30, 40, 58, 190),
+            border=(90, 140, 180, 255) if self.back_hovered else (90, 120, 150, 255),
+            text_color=(190, 210, 220),
+            pulse=self.blink_timer * 8,
+        )
 
         for idx, button in enumerate(self.buttons):
             rect = button["rect"]
             unlocked = button["unlocked"]
             completed = button["completed"]
-            hovered = self.hovered_index == idx or self.selected_index == idx
+            hovered = self.hovered_index == idx
             blink = idx == (self.progress.get("highest_unlocked", 1) - 1) and self.blink_timer % 1.0 < 0.5
 
             fill = (35, 70, 100)
@@ -273,9 +341,13 @@ class LevelSelectState(State):
             elif completed:
                 fill = (26, 86, 42)
                 border = (80, 255, 140)
-            elif hovered:
-                fill = (20, 110, 130)
-                border = (0, 255, 255)
+            if hovered:
+                if unlocked:
+                    fill = (20, 110, 130) if not completed else (40, 130, 70)
+                    border = (0, 255, 255) if not completed else (180, 255, 180)
+                else:
+                    fill = (60, 60, 70)
+                    border = (140, 140, 160)
 
             if unlocked and blink:
                 fill = (20, 130, 120)
@@ -300,7 +372,7 @@ class LevelSelectState(State):
                 status_tag = self.game.assets.font.render("PLAY", True, (0, 240, 255))
                 screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
 
-        hint = self.game.assets.font.render("Click a level or use arrows + ENTER", True, (120, 140, 160))
+        hint = self.game.assets.font.render("Hover a tile then click it, or use mouse + Enter on the current hover target", True, (120, 140, 160))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 60))
         screen.blit(hint, hint_rect)
 
@@ -699,6 +771,7 @@ class PauseState(State):
         self.hovered_index = None
         self.buttons = []
         self._build_buttons()
+        self.anim_timer = 0.0
         
         # Transparent dark overlay cover
         self.overlay = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
@@ -735,6 +808,9 @@ class PauseState(State):
                 elif event.key == pg.K_q:
                     self.game.change_state(MenuState(self.game))
 
+    def update(self, dt):
+        self.anim_timer += dt
+
     def draw(self, screen):
         # 1. Render gameplay frames in background so player can see screen behind overlay
         self.previous_state.draw(screen)
@@ -751,16 +827,21 @@ class PauseState(State):
             rect = button["rect"]
             hovered = self.hovered_index == idx
             fill = (20, 30, 44, 220)
-            border = (90, 120, 150)
+            border = (90, 120, 150, 255)
             if hovered:
                 fill = (24, 88, 105, 240)
-                border = (0, 255, 255)
-            panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
-            panel.fill(fill)
-            pg.draw.rect(panel, border, panel.get_rect(), 2, border_radius=10)
-            screen.blit(panel, rect)
-            label = self.game.assets.font.render(button["label"], True, (240, 240, 240))
-            screen.blit(label, label.get_rect(center=rect.center))
+                border = (0, 255, 255, 255)
+            _draw_ui_button(
+                screen,
+                rect,
+                button["label"],
+                self.game.assets.font,
+                hovered=hovered,
+                fill=fill,
+                border=border,
+                text_color=(240, 240, 240),
+                pulse=self.anim_timer * 10 + idx,
+            )
         
         hint = self.game.assets.font.render("Press SPACE / ESC to Resume   |   Q to Quit", True, (220, 220, 220))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height // 2 + 120))
@@ -778,21 +859,29 @@ class GameOverState(State):
         self.score = score
         self.save_system = SaveSystem()
         self.player_name = ""
+        self.save_rect = pg.Rect(self.game.width // 2 - 135, self.game.height // 2 + 110, 270, 52)
+        self.save_hovered = False
         
         # Blinking cursor indicator variables
         self.cursor_visible = True
         self.cursor_timer = 0.0
 
+    def _save_score(self):
+        final_name = self.player_name.strip() or "PILOT"
+        self.save_system.save_score(final_name, self.score)
+        self.game.change_state(HighScoresState(self.game))
+
     def handle_events(self, events):
         """Processes keyboard text letters to build the username string."""
         for event in events:
-            if event.type == pg.KEYDOWN:
+            if event.type == pg.MOUSEMOTION:
+                self.save_hovered = self.save_rect.collidepoint(event.pos)
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.save_rect.collidepoint(event.pos):
+                    self._save_score()
+            elif event.type == pg.KEYDOWN:
                 if event.key == pg.K_RETURN:
-                    # Save finalized score entry
-                    final_name = self.player_name.strip() or "PILOT"
-                    self.save_system.save_score(final_name, self.score)
-                    # Transition to leaderboard
-                    self.game.change_state(HighScoresState(self.game))
+                    self._save_score()
                 elif event.key == pg.K_BACKSPACE:
                     # Remove last character
                     self.player_name = self.player_name[:-1]
@@ -834,9 +923,21 @@ class GameOverState(State):
         name_surf = self.game.assets.title_font.render(display_name, True, (255, 255, 255))
         name_rect = name_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + 60))
         screen.blit(name_surf, name_rect)
+
+        _draw_ui_button(
+            screen,
+            self.save_rect,
+            "SAVE SCORE",
+            self.game.assets.font,
+            hovered=self.save_hovered,
+            fill=(40, 12, 20, 220),
+            border=(255, 100, 110, 255) if self.save_hovered else (190, 80, 90, 255),
+            text_color=(255, 230, 230),
+            pulse=self.cursor_timer * 12,
+        )
         
         # Bottom hint
-        hint = self.game.assets.hud_font.render("Press ENTER to Save Score & View Leaderboard", True, (130, 140, 150))
+        hint = self.game.assets.hud_font.render("Click SAVE SCORE or press ENTER to View Leaderboard", True, (130, 140, 150))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
         screen.blit(hint, hint_rect)
 
@@ -851,14 +952,23 @@ class GameCompleteState(State):
         self.save_system = SaveSystem()
         self.starfield   = Starfield(self.game.width, self.game.height, num_stars=150)
         self.timer       = 0.0   # Used for animation
+        self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
+        self.continue_hovered = False
+
+    def _finalize(self):
+        self.save_system.save_score("VICTOR", self.score)
+        self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
         for event in events:
-            if event.type == pg.KEYDOWN:
+            if event.type == pg.MOUSEMOTION:
+                self.continue_hovered = self.continue_rect.collidepoint(event.pos)
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.continue_rect.collidepoint(event.pos):
+                    self._finalize()
+            elif event.type == pg.KEYDOWN:
                 if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
-                    # Auto-save with name "VICTOR" and return to campaign selection.
-                    self.save_system.save_score("VICTOR", self.score)
-                    self.game.change_state(LevelSelectState(self.game))
+                    self._finalize()
 
     def update(self, dt):
         self.starfield.update(dt)
@@ -883,7 +993,19 @@ class GameCompleteState(State):
         score_rect = score_surf.get_rect(center=(self.game.width // 2, self.game.height // 2))
         screen.blit(score_surf, score_rect)
 
-        hint = self.game.assets.font.render("Press ENTER / SPACE to view Leaderboard", True, (100, 130, 150))
+        _draw_ui_button(
+            screen,
+            self.continue_rect,
+            "VIEW LEADERBOARD",
+            self.game.assets.font,
+            hovered=self.continue_hovered,
+            fill=(26, 40, 52, 220),
+            border=(255, 210, 70, 255) if self.continue_hovered else (180, 150, 60, 255),
+            text_color=(255, 240, 200),
+            pulse=self.timer * 8,
+        )
+
+        hint = self.game.assets.font.render("Click VIEW LEADERBOARD or press ENTER / SPACE", True, (100, 130, 150))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 100))
         screen.blit(hint, hint_rect)
 
@@ -896,6 +1018,7 @@ class HighScoresState(State):
         self.scores_list = self.save_system.load_scores()
         self.back_rect = pg.Rect(40, 40, 120, 48)
         self.back_hovered = False
+        self.anim_timer = 0.0
 
     def handle_events(self, events):
         """Allows returning back to the Main Menu with mouse or keyboard."""
@@ -910,6 +1033,9 @@ class HighScoresState(State):
                 if event.key in (pg.K_ESCAPE, pg.K_RETURN, pg.K_SPACE):
                     self.game.change_state(MenuState(self.game))
 
+    def update(self, dt):
+        self.anim_timer += dt
+
     def draw(self, screen):
         # Cosmic dark blue fill
         screen.fill((10, 12, 22))
@@ -919,12 +1045,17 @@ class HighScoresState(State):
         title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 6))
         screen.blit(title, title_rect)
 
-        back_surface = pg.Surface((self.back_rect.width, self.back_rect.height), pg.SRCALPHA)
-        back_surface.fill((30, 40, 58, 190))
-        pg.draw.rect(back_surface, (90, 140, 180) if self.back_hovered else (90, 120, 150), back_surface.get_rect(), 1, border_radius=6)
-        screen.blit(back_surface, self.back_rect)
-        back_text = self.game.assets.font.render("← MENU", True, (190, 210, 220))
-        screen.blit(back_text, back_text.get_rect(center=self.back_rect.center))
+        _draw_ui_button(
+            screen,
+            self.back_rect,
+            "← MENU",
+            self.game.assets.font,
+            hovered=self.back_hovered,
+            fill=(30, 40, 58, 190),
+            border=(90, 140, 180, 255) if self.back_hovered else (90, 120, 150, 255),
+            text_color=(190, 210, 220),
+            pulse=self.anim_timer * 8,
+        )
         
         # Draw high scores in a formatted 3-column table
         for idx, item in enumerate(self.scores_list[:10]):
@@ -946,6 +1077,6 @@ class HighScoresState(State):
             screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
             
         # Return instructions
-        hint = self.game.assets.font.render("Mouse click the MENU button or press ESC/SPACE", True, (100, 120, 140))
+        hint = self.game.assets.font.render("Hover the MENU button, then click it, or press ESC/SPACE", True, (100, 120, 140))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
         screen.blit(hint, hint_rect)

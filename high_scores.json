@@ -16,7 +16,15 @@
         "score": 5000
     },
     {
+        "name": "PILOT",
+        "score": 1234
+    },
+    {
         "name": "RECRUIT",
         "score": 1000
+    },
+    {
+        "name": "VICTOR",
+        "score": 999
     }
 ]
