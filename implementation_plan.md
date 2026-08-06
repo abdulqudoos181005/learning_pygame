@@ -229,36 +229,30 @@ do as it is required
 ---
 
 
-## Sprint 5 — ✅ COMPLETE
+## Sprint 5 
+**description** gameplay changes
 
-### 1. Level Completion Flow & Replayability
+### change no 1.
+**description** after completion of a level, go back to the level state and so the player sees the level state and selects either the new level (which just unlocked by clear a previous level) or select any other level as he whiches rather than progressing automaticly.
+*reason*: current way doesnt give the **feel** of progression and this way will do
+[NOTE] the player should get a "congratulations" message window (showing its score) before getting to the levels menu. 
 
-#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
-- A cleared level now transitions to a dedicated `LevelCompleteState` congratulation popup before returning the player to the campaign selector.
-- The progress screen preserves replayability by sending the player back to `LevelSelectState` instead of forcing an automatic next-level jump.
-- The popup reports the cleared level and the accumulated score for a stronger progression feel.
+### change no 2.
+**description** the power-ups changes:
+-there should be a "pity/acculmation" system so a power-up drop id guareented after killing 3 enemies **NOTE** it should follow a random approach as it does right now *but* only if it doesn't drop after killing any 2 enemies the 3rd enemy should drop.
+-the leaser should be upgraded after every 3 levels,  and the upgrades should effect its damage and color, 
+*teir-1* normal, as it is currently, for 1,2 and 3 level.
+*teir-2* bit higher damage, as it is currently for powerful laser power-up, for 4,5 and 6 level.
+*teir-3* same jump up as in teir-1 to teir-2, and purple color, for 7,8,9 and 10 level.
+-the powerful laser powerup should act as the next laser teir which will come as a next progressive laser upgrade. [flow] if i am at 2nd level (teir-1), then powerful laser powerup should give me the laser as ill get after completing the 3rd level (teir-2) and likewise with other scenarios.
+*Reason* current system diesnt feel rewarding and as the game progresses it feels more difficult and tiresome
+**GOAL** to overcome the short commings (mentioned in the reasons) and make the gameplay more engaing
 
-### 2. Power-Up Reward Progression
-
-#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
-- Added a guaranteed pity system: if the player has not seen a power-up drop after 2 enemy kills, the 3rd kill guarantees a drop while still keeping the normal random drop chance.
-- The drop flow now respects the new reward rhythm without breaking the existing random reward design.
-
-#### ✅ [DONE] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
-- Laser progression is now level-gated:
-  - Tier 1: levels 1–3
-  - Tier 2: levels 4–6
-  - Tier 3: levels 7–10
-- A collected `power_laser` now acts as the next progressive tier upgrade for the player’s current run, rather than only a one-off temporary power boost.
-
-#### ✅ [DONE] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
-- Added a tier-3 purple laser visual so the upgraded beam color communicates the new weapon tier clearly.
-
-### 3. Invincibility & Blink Feedback
-
-#### ✅ [DONE] [sprites.py](file:///d:/projects/learning_pygame/src/sprites.py)
-- The player now gains a 4-second invincibility window when a level begins and again after losing a life.
-- During the invulnerable window, the ship flashes/blinks so the player can clearly understand the safety window and avoid panic.
+### change no 3:
+**description** add a invincibility for 4 secs in the start of a level and as a life is lost and the begining of the new life,
+-make the player blink for the duration of the invincibility so the player knows he is invincible
+*Reason* in some circumstances player may panick or might crash and to prevent that we will do this 
+**GOAL** to ensure good gameplay
 
 ### Sprint 5 completion notes
 - The sprint goals are now live in the game loop: level completion loops back to the campaign selector via a score-based congratulations popup, power rewards are more forgiving and better paced, and the player receives clear safety feedback during the start-of-level and respawn invulnerability intervals.
@@ -273,7 +267,6 @@ do as it is required
 - `sprites.py` — import check, `PowerUp.BASE_TYPES`, `PowerUp.EXTRA_TYPES`, `Missile.DAMAGE` constants.
 - `states.py` — `PlayState` instantiation and `update(dt)` with headless display.
 - All 7 source files — AST syntax parse with zero errors.
-- Sprint 5 smoke verification — compile all source files and confirm the new `LevelCompleteState` factory, invincibility activation, and level-tier progression assertions succeed in a headless runtime check.
 
 ### Manual Verification (To Do)
 - [done] Playtest Level 1–2: scouts and stingers spawn correctly.
@@ -285,11 +278,3 @@ do as it is required
 - [done] Verify `GameCompleteState` displays after Level 10 boss defeat.
 - [done] Verify triple-shot timer shows 12s bar (not 8s).
 - [done] Verify speed boost timer shows 12s bar (not 8s).
-- [done] Verify a cleared level returns to the levels menu via the new congratulations popup.
-- [done] Verify the pity-drop system forces a reward on the third kill if no previous reward was awarded.
-- [done] Verify the player flashes when invincible at the start of a level or after losing a life.
-
-### Verification Evidence
-- Fresh compile verification command: `python -m compileall src`
-- Fresh runtime smoke test evidence: the headless assertion check completed with `verification ok` after instantiating `PlayState` for tiers 1, 4, and 7 and confirming the new `LevelCompleteState` entry point exists.
-- Result: the updated Sprint 5 logic is syntactically valid and the new state setup is confirmed in the runtime path used by the game.
