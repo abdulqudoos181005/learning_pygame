@@ -273,6 +273,12 @@ do as it is required
 **GOAL**
 - To add all the features mentioned above without compromising already added functions and flow
 
+## debugging 6th sprint
+- make the asteriods be destroyable
+- add the particles effect on up the interactions
+- add a screen shake when the collisions between the player and asteriod 
+- improve the movement of the asteriods so it feels like an asteriods rhater than a living thing
+
 ---
 
 ## Verification Plan
