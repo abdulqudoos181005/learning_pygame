@@ -146,6 +146,7 @@ class LevelSystem:
         self.wave_index  = 0         # 0-based index into current level's waves list
         self.spawned     = 0         # Enemies spawned in the current wave so far
         self.spawn_timer = 0.0       # Countdown until next spawn
+        self.spawn_queue = []        # Queue of enemy types for smoother, data-structure-based spawning
         self.complete    = False     # True after Level 10 boss is defeated
         self._load_wave()
 
@@ -200,11 +201,18 @@ class LevelSystem:
         """Reset per-wave counters for the current wave."""
         self.spawned     = 0
         self.spawn_timer = 0.0
+        self.spawn_queue = []
+        if not self.current_wave_cfg["boss"]:
+            import random
+            self.spawn_queue = [
+                random.choices(self.current_wave_cfg["types"], weights=self.current_wave_cfg["weights"])[0]
+                for _ in range(self.current_wave_cfg["count"])
+            ]
 
     def tick_spawn(self, dt):
         """
         Called every frame (after the intro banner clears).
-        
+
         Returns:
             str or None: enemy type to spawn ('scout','stinger','cruiser','boss'),
                          or None if no spawn this frame.
@@ -222,15 +230,20 @@ class LevelSystem:
         if self.spawned >= cfg["count"]:
             return None
 
+        if not self.spawn_queue:
+            import random
+            self.spawn_queue = [
+                random.choices(cfg["types"], weights=cfg["weights"])[0]
+                for _ in range(cfg["count"])
+            ]
+
         self.spawn_timer -= dt
         if self.spawn_timer > 0:
             return None
 
         self.spawn_timer = cfg["spawn_delay"]
         self.spawned += 1
-
-        import random
-        return random.choices(cfg["types"], weights=cfg["weights"])[0]
+        return self.spawn_queue.pop(0)
 
     def wave_finished_spawning(self):
         """True when all enemies for this wave have been queued."""

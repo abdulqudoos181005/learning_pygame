@@ -244,12 +244,36 @@ class AssetsLoader:
             pg.draw.circle(surf, (180, 140, 0, 100), (w // 2, h // 2), w // 2 - 6)
             txt = self.hud_font.render("V", True, (255, 255, 255))
             surf.blit(txt, txt.get_rect(center=(w // 2, h // 2)))
-            
+
+        elif name.startswith("asteroid_"):
+            # Asteroid hazard: irregular rock, sized by the requested chunk and rock color.
+            if "brown" in name:
+                rock_fill = (120, 80, 45)
+                rock_outline = (170, 120, 80)
+            else:
+                rock_fill = (130, 130, 130)
+                rock_outline = (190, 190, 190)
+
+            points = [
+                (w * 0.20, h * 0.10), (w * 0.55, h * 0.05), (w * 0.88, h * 0.25),
+                (w * 0.95, h * 0.60), (w * 0.75, h * 0.92), (w * 0.42, h * 0.98),
+                (w * 0.10, h * 0.78), (w * 0.02, h * 0.45), (w * 0.08, h * 0.20)
+            ]
+            pg.draw.polygon(surf, rock_fill, points)
+            pg.draw.polygon(surf, rock_outline, points, 2)
+            craters = [
+                (w * 0.28, h * 0.35, w * 0.12, h * 0.10),
+                (w * 0.62, h * 0.50, w * 0.16, h * 0.12),
+                (w * 0.38, h * 0.68, w * 0.12, h * 0.09),
+            ]
+            for cx, cy, cw, ch in craters:
+                pg.draw.ellipse(surf, (80, 60, 40) if "brown" in name else (90, 90, 90), (cx, cy, cw, ch))
+
         else:
             # Fallback graphic: bright magenta box with crosses so it stands out as an error
             pg.draw.rect(surf, (255, 0, 255), (0, 0, w, h), 2)
             pg.draw.line(surf, (255, 0, 255), (0, 0), (w, h), 2)
             pg.draw.line(surf, (255, 0, 255), (w, 0), (0, h), 2)
-            
+
         return surf
 

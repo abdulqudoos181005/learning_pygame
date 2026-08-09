@@ -409,6 +409,44 @@ class Boss(pg.sprite.Sprite):
             state.all_sprites.add(l)
 
 
+class Asteroid(pg.sprite.Sprite):
+    """Hazard rock that drifts downward and damages the player on impact."""
+    SIZES = ("small", "medium", "large")
+    COLORS = ("brown", "grey")
+    DAMAGE_BY_SIZE = {"small": 8, "medium": 15, "large": 25}
+    SIZE_TO_SCALE = {"small": 32, "medium": 48, "large": 64}
+
+    def __init__(self, game, x=None, y=None, size=None, color=None):
+        super().__init__()
+        self.game = game
+        self.size = size or random.choice(self.SIZES)
+        self.color = color or random.choice(self.COLORS)
+        self.damage = self.DAMAGE_BY_SIZE[self.size]
+
+        scale = self.SIZE_TO_SCALE[self.size]
+        self.image = self.game.assets.get_image(f"asteroid_{self.size}_{self.color}", scale, scale)
+        self.rect = self.image.get_rect(center=(x or random.randint(40, self.game.width - 40), y or -40))
+
+        self.speed_y = random.uniform(70, 120) * ({"small": 1.0, "medium": 1.2, "large": 1.4}[self.size])
+        self.speed_x = random.uniform(-30, 30)
+        self.spin = random.uniform(-35, 35)
+        self.rotation = random.uniform(0, 360)
+
+    def update(self, dt):
+        self.rect.x += self.speed_x * dt
+        self.rect.y += self.speed_y * dt
+        self.rotation += self.spin * dt
+        self.image = pg.transform.rotate(self.game.assets.get_image(
+            f"asteroid_{self.size}_{self.color}",
+            self.SIZE_TO_SCALE[self.size],
+            self.SIZE_TO_SCALE[self.size],
+        ), self.rotation)
+        self.rect = self.image.get_rect(center=self.rect.center)
+
+        if self.rect.top > self.game.height + 40 or self.rect.left > self.game.width + 50 or self.rect.right < -50:
+            self.kill()
+
+
 class Missile(pg.sprite.Sprite):
     """
     A homing missile that targets the highest-health enemy on screen.

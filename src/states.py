@@ -2,7 +2,7 @@
 import pygame as pg
 import random
 import math
-from sprites import Player, Enemy, Laser, Boss, PowerUp, Missile
+from sprites import Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid
 from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
 from level_system import LevelSystem
@@ -408,7 +408,9 @@ class PlayState(State):
         self.powerups      = pg.sprite.Group()
         self.particles     = pg.sprite.Group()
         self.missiles      = pg.sprite.Group()   # Sprint 2: homing missiles group
-        
+        self.asteroids     = pg.sprite.Group()   # Sprint 6: hazard rocks
+        self.asteroid_timer = 0.0
+
         # Initialize Player in the center-bottom of the viewport
         self.player = Player(self.game, self.game.width // 2, self.game.height - 100)
         self.player_group.add(self.player)
@@ -466,8 +468,14 @@ class PlayState(State):
 
         # 2. BACKGROUND ANIMATION
         self.starfield.update(dt)
+
+        # 3. ASTEROID HAZARDS (Sprint 6)
+        self.asteroid_timer -= dt
+        if self.asteroid_timer <= 0:
+            self._spawn_asteroid()
+            self.asteroid_timer = random.uniform(2.2, 4.5)
         
-        # 3. ENEMY SPAWNING via LevelSystem
+        # 4. ENEMY SPAWNING via LevelSystem
         if self.wave_intro_timer > 0:
             # Freeze enemy spawning while the wave intro text is showing
             self.wave_intro_timer -= dt
@@ -520,16 +528,33 @@ class PlayState(State):
                     self.game.change_state(GameCompleteState(self.game, self.score))
                     return
 
-        # 4. SPRITE & PARTICLE PHYSICS
+        # 5. SPRITE & PARTICLE PHYSICS
         self.all_sprites.update(dt)
         self.particles.update(dt)
 
-        # 5. COLLISION CHECKS
+        # 6. COLLISION CHECKS
         self._check_collisions()
+
+    def _spawn_asteroid(self):
+        """Spawns a hazard asteroid from the top of the screen."""
+        size = random.choices(["small", "medium", "large"], weights=[0.55, 0.30, 0.15])[0]
+        asteroid = Asteroid(self.game, x=random.randint(40, self.game.width - 40), y=-60, size=size)
+        self.asteroids.add(asteroid)
+        self.all_sprites.add(asteroid)
 
     def _check_collisions(self):
         """Handles hitbox intersections between game elements."""
-        
+
+        # 0. Asteroids hitting the player
+        player_asteroid_hits = pg.sprite.spritecollide(self.player, self.asteroids, True)
+        for asteroid in player_asteroid_hits:
+            spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(150, 110, 80), count=18)
+            if self.player.get_hit(asteroid.damage):
+                spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
+                if self.player.lives <= 0:
+                    self.game.change_state(GameOverState(self.game, self.score))
+                    return
+
         # 1. Player lasers hitting enemies
         # pg.sprite.groupcollide detects intersections between sprites of two groups.
         # Arguments: (group1, group2, dokill1, dokill2).
