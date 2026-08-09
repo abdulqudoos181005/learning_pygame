@@ -414,6 +414,7 @@ class Asteroid(pg.sprite.Sprite):
     SIZES = ("small", "medium", "large")
     COLORS = ("brown", "grey")
     DAMAGE_BY_SIZE = {"small": 8, "medium": 15, "large": 25}
+    HEALTH_BY_SIZE = {"small": 25, "medium": 45, "large": 70}
     SIZE_TO_SCALE = {"small": 32, "medium": 48, "large": 64}
 
     def __init__(self, game, x=None, y=None, size=None, color=None):
@@ -422,6 +423,8 @@ class Asteroid(pg.sprite.Sprite):
         self.size = size or random.choice(self.SIZES)
         self.color = color or random.choice(self.COLORS)
         self.damage = self.DAMAGE_BY_SIZE[self.size]
+        self.max_health = self.HEALTH_BY_SIZE[self.size]
+        self.health = self.max_health
 
         scale = self.SIZE_TO_SCALE[self.size]
         self.image = self.game.assets.get_image(f"asteroid_{self.size}_{self.color}", scale, scale)
@@ -431,16 +434,29 @@ class Asteroid(pg.sprite.Sprite):
         self.speed_x = random.uniform(-30, 30)
         self.spin = random.uniform(-35, 35)
         self.rotation = random.uniform(0, 360)
+        self.wobble = random.uniform(0, math.tau)
+        self.wobble_speed = random.uniform(0.7, 2.2)
+
+    def get_hit(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.kill()
+            return True
+        return False
 
     def update(self, dt):
-        self.rect.x += self.speed_x * dt
+        drift = math.sin(self.wobble) * 10
+        self.rect.x += (self.speed_x + drift) * dt
         self.rect.y += self.speed_y * dt
+        self.wobble += self.wobble_speed * dt
         self.rotation += self.spin * dt
-        self.image = pg.transform.rotate(self.game.assets.get_image(
+
+        base = self.game.assets.get_image(
             f"asteroid_{self.size}_{self.color}",
             self.SIZE_TO_SCALE[self.size],
             self.SIZE_TO_SCALE[self.size],
-        ), self.rotation)
+        )
+        self.image = pg.transform.rotate(base, self.rotation)
         self.rect = self.image.get_rect(center=self.rect.center)
 
         if self.rect.top > self.game.height + 40 or self.rect.left > self.game.width + 50 or self.rect.right < -50:

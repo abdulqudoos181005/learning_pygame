@@ -417,6 +417,7 @@ class PlayState(State):
         self.all_sprites.add(self.player)
         self.player.base_laser_tier = self._laser_tier_for_level(self.selected_level)
         self.player.activate_invincibility(4.0)
+        self.asteroid_timer = 1.5
         
         # Game stats
         self.score = 0
@@ -535,19 +536,57 @@ class PlayState(State):
         # 6. COLLISION CHECKS
         self._check_collisions()
 
-    def _spawn_asteroid(self):
+    def _spawn_asteroid(self, size=None, x=None, y=None, color=None):
         """Spawns a hazard asteroid from the top of the screen."""
-        size = random.choices(["small", "medium", "large"], weights=[0.55, 0.30, 0.15])[0]
-        asteroid = Asteroid(self.game, x=random.randint(40, self.game.width - 40), y=-60, size=size)
+        size = size or random.choices(["small", "medium", "large"], weights=[0.55, 0.30, 0.15])[0]
+        asteroid = Asteroid(self.game, x=x or random.randint(40, self.game.width - 40), y=y or -60, size=size, color=color)
         self.asteroids.add(asteroid)
         self.all_sprites.add(asteroid)
+        return asteroid
+
+    def _break_asteroid(self, asteroid):
+        """Break a larger asteroid into smaller, damaging chunks."""
+        if asteroid.size == "small":
+            return
+
+        next_sizes = {"large": ["medium", "medium"], "medium": ["small", "small"]}
+        for child_size in next_sizes[asteroid.size]:
+            child = self._spawn_asteroid(
+                size=child_size,
+                x=asteroid.rect.centerx + random.randint(-12, 12),
+                y=asteroid.rect.centery + random.randint(-12, 12),
+                color=asteroid.color,
+            )
+            child.speed_x = asteroid.speed_x * 1.2 + random.uniform(-30, 30)
+            child.speed_y = asteroid.speed_y * 0.9 + random.uniform(15, 45)
+            child.rotation = random.uniform(0, 360)
+            child.spin = random.uniform(-80, 80)
 
     def _check_collisions(self):
         """Handles hitbox intersections between game elements."""
 
+        asteroid_hits = pg.sprite.groupcollide(self.asteroids, self.player_lasers, False, True)
+        for asteroid, lasers in asteroid_hits.items():
+            for laser in lasers:
+                if asteroid.get_hit(laser.damage):
+                    spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(170, 120, 80), count=24)
+                    self._break_asteroid(asteroid)
+                    self.score += asteroid.max_health // 2
+                    break
+                spawn_sparks(self.particles, laser.rect.centerx, laser.rect.centery, (0, 0), color=(255, 180, 120), count=6)
+
+        missile_hits = pg.sprite.groupcollide(self.asteroids, self.missiles, False, True)
+        for asteroid, missiles_hit in missile_hits.items():
+            for _ in missiles_hit:
+                if asteroid.get_hit(Missile.DAMAGE):
+                    spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(255, 150, 0), count=30)
+                    self._break_asteroid(asteroid)
+                    self.score += asteroid.max_health // 2
+
         # 0. Asteroids hitting the player
         player_asteroid_hits = pg.sprite.spritecollide(self.player, self.asteroids, True)
         for asteroid in player_asteroid_hits:
+            self.trigger_shake(0.22, 8)
             spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(150, 110, 80), count=18)
             if self.player.get_hit(asteroid.damage):
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
