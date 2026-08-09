@@ -258,6 +258,21 @@ do as it is required
 - The sprint goals are now live in the game loop: level completion loops back to the campaign selector via a score-based congratulations popup, power rewards are more forgiving and better paced, and the player receives clear safety feedback during the start-of-level and respawn invulnerability intervals.
 - These changes were implemented without regressing the existing mouse-click UI and level selector flow from Sprint 3–4.
 
+
+## sprint 6
+**description** general changes in ui and mechanics of the game
+### change-1:
+- make the game smoother by applying data structures in the generation\spawning of the enemies 
+### change-2:
+- spwaning asteriods that are of three sizes (small,medium and large) and two colors (broen and grey)
+- they just move forward and if player hits it does a bit of damage to player
+- the damage should be relavite to the size of the asteriods small to lowest and large the highest
+--
+*Reason* 
+- to add the new features and giving the game a **Feel** of a challange
+**GOAL**
+- To add all the features mentioned above without compromising already added functions and flow
+
 ---
 
 ## Verification Plan
