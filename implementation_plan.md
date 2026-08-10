@@ -326,6 +326,44 @@ By the end of this sprint, the game should feel like a real arcade shooter inste
 - The focus is on responsiveness, clarity, reward, sound, and pacing so the project feels cohesive and fun to play.
 - These improvements are the difference between a functional game and a game that feels alive, intentional, and memorable.
 
+---
+
+## Sprint 7 — Fix: Level-Clear Spacebar Repeat Bug
+
+### description
+This sprint is dedicated to the bug where the player can hold the spacebar on the level-cleared screen and the game continues to advance repeatedly or too quickly, causing accidental state skipping and inconsistent progression.
+
+### root cause
+The level-clear screen currently accepts keyboard input too eagerly. When the spacebar is held down, repeated `KEYDOWN` events or key-repeat behavior can trigger the continue action multiple times before the state transition completes. Because the game is changing screens immediately, the input loop can keep firing and cause rapid or duplicate advancement.
+
+### goal
+Stop the level-clear progression from repeating and force a single, clean transition per screen instance.
+
+### required fix
+- Add a one-time action guard for the level-clear continue flow.
+- Ignore repeated key events while the same key is still being held down.
+- Allow only one transition action from the level-clear screen even if the player is pressing `SPACE`, `ENTER`, or mouse-clicking repeatedly.
+- Prevent the same input from firing again during the state swap itself.
+- Apply the same defensive pattern to any other final-screen continuation states that are vulnerable to held-key repeat behavior.
+
+### implementation notes
+- Use a boolean such as `transition_locked` or `action_fired` in the level-complete state.
+- Only allow `_continue()` to run once.
+- In `handle_events()`, ignore repeated keydown events by checking `event.key` + `event.type` behavior and skip anything while the screen is already transitioning.
+- If a button is clicked or keyboard input triggers, the action should immediately lock and then change state.
+- The player should still be able to continue normally with a single press, but not by holding the button down.
+
+### acceptance criteria
+- Pressing and holding space on the level-clear screen should not rapidly re-enter the level selector.
+- A single key press or single mouse click should continue exactly once.
+- The game must transition cleanly without stacking extra state changes.
+- The fix should be repeat-safe and easy to reuse for future UI states.
+
+### Sprint 7 completion notes
+- This bug must be closed before the game is considered stable, because it creates confusing progression behavior and makes the level-complete flow feel broken.
+- The fix is a small but important input-safety pass: one press, one transition, no repeat spam while the key is held.
+- This sprint ends the bug rather than leaving it to user frustration during playtesting.
+
 
 ## sprint 6
 **description** general changes in ui and mechanics of the game
