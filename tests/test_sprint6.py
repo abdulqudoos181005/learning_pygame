@@ -14,6 +14,27 @@ pygame.display.set_mode((1280, 720))
 
 from level_system import LevelSystem
 from sprites import Asteroid
+from states import LevelCompleteState
+
+
+class DummyAssets:
+    def __init__(self):
+        self.font = pygame.font.SysFont('arial', 24)
+        self.title_font = pygame.font.SysFont('arial', 48)
+        self.hud_font = pygame.font.SysFont('arial', 18)
+
+
+class DummyGame:
+    def __init__(self):
+        self.width = 1280
+        self.height = 720
+        self.assets = DummyAssets()
+        self.state = None
+        self.target = None
+
+    def change_state(self, state):
+        self.target = state
+        self.state = state
 
 
 class Sprint6FeaturesTest(unittest.TestCase):
@@ -33,6 +54,18 @@ class Sprint6FeaturesTest(unittest.TestCase):
         self.assertIn('large', Asteroid.SIZES)
         self.assertIn('brown', Asteroid.COLORS)
         self.assertIn('grey', Asteroid.COLORS)
+
+    def test_level_complete_state_ignores_keyboard_continue(self):
+        game = DummyGame()
+        state = LevelCompleteState(game, 500, 2)
+
+        state.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)])
+        self.assertFalse(getattr(state, 'transition_locked', False))
+        self.assertIsNone(game.target)
+
+        state.handle_events([pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(state.continue_rect.centerx, state.continue_rect.centery))])
+        self.assertTrue(state.transition_locked)
+        self.assertIsNotNone(game.target)
 
 
 if __name__ == '__main__':

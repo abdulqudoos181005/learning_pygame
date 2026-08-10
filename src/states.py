@@ -1108,19 +1108,22 @@ class LevelCompleteState(State):
         self.timer = 0.0
         self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
         self.continue_hovered = False
+        self.transition_locked = False
 
     def _continue(self):
+        if self.transition_locked:
+            return
+        self.transition_locked = True
         self.game.change_state(LevelSelectState(self.game))
 
     def handle_events(self, events):
+        if self.transition_locked:
+            return
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 self.continue_hovered = self.continue_rect.collidepoint(event.pos)
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.continue_rect.collidepoint(event.pos):
-                    self._continue()
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
                     self._continue()
 
     def update(self, dt):
@@ -1168,20 +1171,23 @@ class GameCompleteState(State):
         self.timer       = 0.0   # Used for animation
         self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
         self.continue_hovered = False
+        self.transition_locked = False
 
     def _finalize(self):
+        if self.transition_locked:
+            return
+        self.transition_locked = True
         self.save_system.save_score("VICTOR", self.score)
         self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
+        if self.transition_locked:
+            return
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 self.continue_hovered = self.continue_rect.collidepoint(event.pos)
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.continue_rect.collidepoint(event.pos):
-                    self._finalize()
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
                     self._finalize()
 
     def update(self, dt):
