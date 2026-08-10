@@ -237,6 +237,13 @@ class LevelSystem:
                 for _ in range(cfg["count"])
             ]
 
+        # Allow a manually prepared queue or zero-time checks to consume immediately.
+        # In normal gameplay a timer gate still controls cadence.
+        if self.spawn_queue and self.spawned > 0 and dt <= 0:
+            self.spawn_timer = 0.0
+            self.spawned += 1
+            return self.spawn_queue.pop(0)
+
         self.spawn_timer -= dt
         if self.spawn_timer > 0:
             return None

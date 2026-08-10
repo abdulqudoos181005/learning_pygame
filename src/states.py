@@ -431,7 +431,12 @@ class PlayState(State):
         # Boss tracking
         self.boss_active   = False
         self.boss_instance = None
-        
+
+        # Sprint 6 game-feel feedback
+        self.damage_flash = 0.0
+        self.boss_warning_timer = 0.0
+        self.float_texts = []
+
         # Screen shake status
         self.shake_duration  = 0.0
         self.shake_magnitude = 0
@@ -441,6 +446,22 @@ class PlayState(State):
         """Enables screen shake with a specific duration and strength."""
         self.shake_duration  = duration
         self.shake_magnitude = magnitude
+
+    def trigger_damage_flash(self, amount=0.25):
+        """Adds a brief red hit flash across the screen."""
+        self.damage_flash = max(self.damage_flash, amount)
+
+    def spawn_floating_text(self, x, y, text, color=(255, 255, 255), life=0.8, drift_y=-26):
+        """Creates a floating combat label for score, damage, or pickup feedback."""
+        self.float_texts.append({
+            "x": float(x),
+            "y": float(y),
+            "text": text,
+            "color": color,
+            "life": float(life),
+            "max_life": float(life),
+            "drift_y": float(drift_y),
+        })
 
     def _laser_tier_for_level(self, level_num):
         if level_num <= 3:
@@ -466,6 +487,18 @@ class PlayState(State):
             self.shake_offset.y = random.randint(-self.shake_magnitude, self.shake_magnitude)
         else:
             self.shake_offset.update(0, 0)
+
+        self.damage_flash = max(0.0, self.damage_flash - dt)
+        if self.level_sys.is_boss_wave:
+            self.boss_warning_timer = 1.5
+        elif self.boss_warning_timer > 0:
+            self.boss_warning_timer = max(0.0, self.boss_warning_timer - dt)
+
+        for item in self.float_texts[:]:
+            item["life"] -= dt
+            item["y"] += item["drift_y"] * dt
+            if item["life"] <= 0:
+                self.float_texts.remove(item)
 
         # 2. BACKGROUND ANIMATION
         self.starfield.update(dt)
@@ -535,6 +568,16 @@ class PlayState(State):
 
         # 6. COLLISION CHECKS
         self._check_collisions()
+
+    def _draw_float_text(self, canvas):
+        """Renders floating battle feedback text for rewards and damage."""
+        for item in self.float_texts:
+            alpha = max(0, int((item["life"] / item["max_life"]) * 255))
+            text = self.game.assets.font.render(item["text"], True, (*item["color"], alpha))
+            # pygame color tuples with alpha aren't supported by render; this uses a temporary surface.
+            text.set_alpha(alpha)
+            rect = text.get_rect(center=(int(item["x"]), int(item["y"])))
+            canvas.blit(text, rect)
 
     def _spawn_asteroid(self, size=None, x=None, y=None, color=None):
         """Spawns a hazard asteroid from the top of the screen."""
@@ -609,9 +652,10 @@ class PlayState(State):
                 if enemy.get_hit(laser.damage):
                     self.score += enemy.score_value
                     self.kills_since_powerup += 1
+                    self.spawn_floating_text(enemy.rect.centerx, enemy.rect.top, f"+{enemy.score_value}", color=(255, 210, 80))
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
-                    
+
                     # Determine powerup drop pool based on current level
                     self._try_drop_powerup(enemy)
 
@@ -627,6 +671,7 @@ class PlayState(State):
                 if enemy.get_hit(Missile.DAMAGE):
                     self.score += enemy.score_value
                     self.kills_since_powerup += 1
+                    self.spawn_floating_text(enemy.rect.centerx, enemy.rect.top, f"+{enemy.score_value}", color=(255, 160, 50))
                     self._try_drop_powerup(enemy)
 
         # 3. Enemy lasers hitting Player ship
@@ -639,12 +684,17 @@ class PlayState(State):
             
             # Apply damage to player. Returns True if player loses a life
             if self.player.get_hit(15):
+                self.trigger_damage_flash(0.5)
+                self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-15 HP", color=(255, 100, 100))
                 # Major blue explosion representing ship destruction
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
                 # If out of lives, transition to GameOver State
                 if self.player.lives <= 0:
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
+            else:
+                self.trigger_damage_flash(0.2)
+                self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-15 HP", color=(255, 120, 120))
 
         # 4. Enemy ships colliding directly with Player ship
         # (Crashing deals heavy damage and destroys the enemy)
@@ -654,17 +704,23 @@ class PlayState(State):
             self.score += enemy.score_value // 2
             
             if self.player.get_hit(30):
+                self.trigger_damage_flash(0.6)
+                self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-30 HP", color=(255, 90, 90))
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
                 if self.player.lives <= 0:
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
+            else:
+                self.trigger_damage_flash(0.25)
+                self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-30 HP", color=(255, 110, 110))
 
         # 5. Player ship absorbing floating Power-Ups
         pup_collects = pg.sprite.spritecollide(self.player, self.powerups, True)
         for pup in pup_collects:
             # White particle absorption effect
             spawn_sparks(self.particles, pup.rect.centerx, pup.rect.centery, (0, 0), color=(255, 255, 255), count=15)
-            
+            self.spawn_floating_text(pup.rect.centerx, pup.rect.top, "POWER UP", color=(120, 255, 200))
+
             if pup.type == "shield":
                 # Recharge player shield points
                 self.player.shield = min(self.player.max_shield, self.player.shield + 40)
@@ -711,14 +767,31 @@ class PlayState(State):
     def draw(self, screen):
         # Draw everything onto the offscreen double-buffer canvas
         self.canvas.fill((10, 10, 15))
-        
+
         # Starfield background scrolling
         self.starfield.draw(self.canvas)
-        
+
         # Game elements
         self.all_sprites.draw(self.canvas)
         self.particles.draw(self.canvas)
-        
+        self._draw_float_text(self.canvas)
+
+        # Damage flash overlay for hits
+        if self.damage_flash > 0:
+            flash_alpha = int((self.damage_flash / 0.25) * 120)
+            flash = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
+            flash.fill((255, 30, 30, flash_alpha))
+            self.canvas.blit(flash, (0, 0))
+
+        # Boss warning banner / pulse
+        if self.boss_warning_timer > 0:
+            pulse = 1.0 + 0.25 * math.sin(pg.time.get_ticks() * 0.015)
+            msg = self.game.assets.title_font.render("BOSS ALERT", True, (255, 60, 80))
+            msg_rect = msg.get_rect(center=(self.game.width // 2, 110))
+            scaled = pg.transform.smoothscale(msg, (int(msg.get_width() * pulse), int(msg.get_height() * pulse)))
+            scaled_rect = scaled.get_rect(center=msg_rect.center)
+            self.canvas.blit(scaled, scaled_rect)
+
         # Draw glowing neon shield barrier aura around player if shield points exist
         if self.player.shield > 0:
             shield_radius = 42
