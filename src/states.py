@@ -132,8 +132,8 @@ class MenuState(State):
                 elif event.key == pg.K_DOWN or event.key == pg.K_s:
                     self.selected_index = (self.selected_index + 1) % len(self.options)
                     self.hovered_index = None
-                # ENTER or SPACE selects the currently highlighted option
-                elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
+                # ENTER selects the currently highlighted option
+                elif event.key == pg.K_RETURN:
                     self.click_index = self.selected_index
                     self.click_timer = 0.12
                     self._select_option(self.selected_index)
@@ -284,7 +284,7 @@ class LevelSelectState(State):
                     self._move_selection(-1)
                 elif event.key in (pg.K_RIGHT, pg.K_d):
                     self._move_selection(1)
-                elif event.key in (pg.K_RETURN, pg.K_SPACE):
+                elif event.key == pg.K_RETURN:
                     # Keyboard Enter can only launch a level if the mouse is currently hovering a tile.
                     if self.hovered_index is not None:
                         level_num = self.buttons[self.hovered_index]["level"]
@@ -957,8 +957,8 @@ class PauseState(State):
                             self.game.change_state(MenuState(self.game))
                         return
             elif event.type == pg.KEYDOWN:
-                # ESC or SPACE returns back to the active gameplay state
-                if event.key == pg.K_ESCAPE or event.key == pg.K_SPACE:
+                # ESC returns back to the active gameplay state
+                if event.key == pg.K_ESCAPE:
                     self.game.change_state(self.previous_state)
                 # Q returns to the main menu
                 elif event.key == pg.K_q:
@@ -999,7 +999,7 @@ class PauseState(State):
                 pulse=self.anim_timer * 10 + idx,
             )
         
-        hint = self.game.assets.font.render("Press SPACE / ESC to Resume   |   Q to Quit", True, (220, 220, 220))
+        hint = self.game.assets.font.render("Press ESC to Resume   |   Q to Quit", True, (220, 220, 220))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height // 2 + 120))
         screen.blit(hint, hint_rect)
 
@@ -1225,7 +1225,7 @@ class GameCompleteState(State):
             pulse=self.timer * 8,
         )
 
-        hint = self.game.assets.font.render("Click VIEW LEADERBOARD or press ENTER / SPACE", True, (100, 130, 150))
+        hint = self.game.assets.font.render("Click VIEW LEADERBOARD or press ENTER", True, (100, 130, 150))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 100))
         screen.blit(hint, hint_rect)
 
@@ -1250,7 +1250,7 @@ class HighScoresState(State):
                     self.game.change_state(MenuState(self.game))
                     return
             elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_RETURN, pg.K_SPACE):
+                if event.key in (pg.K_ESCAPE, pg.K_RETURN):
                     self.game.change_state(MenuState(self.game))
 
     def update(self, dt):
@@ -1297,6 +1297,6 @@ class HighScoresState(State):
             screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
             
         # Return instructions
-        hint = self.game.assets.font.render("Hover the MENU button, then click it, or press ESC/SPACE", True, (100, 120, 140))
+        hint = self.game.assets.font.render("Hover the MENU button, then click it, or press ESC", True, (100, 120, 140))
         hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
         screen.blit(hint, hint_rect)
