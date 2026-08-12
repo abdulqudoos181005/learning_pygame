@@ -416,6 +416,7 @@ class PlayState(State):
         self.player_group.add(self.player)
         self.all_sprites.add(self.player)
         self.player.base_laser_tier = self._laser_tier_for_level(self.selected_level)
+        self.player.missile_count = 3
         self.player.activate_invincibility(4.0)
         self.asteroid_timer = 1.5
         
