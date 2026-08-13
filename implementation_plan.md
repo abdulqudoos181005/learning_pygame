@@ -386,7 +386,62 @@ Stop the level-clear progression from repeating and force a single, clean transi
 - improve the movement of the asteriods so it feels like an asteriods rhater than a living thing
 
 ## Sprint 7
+**description** new features to make the game feel more complete and rewarding
 
+### change-1:
+- add a **combo / score-multiplier** system to the gameplay
+- killing enemies in quick succession (within ~2 seconds of each other) builds a combo counter that is displayed on screen
+- the combo multiplier starts at 1× and increases by 0.5× for each consecutive kill up to a cap of 5×
+- the multiplier is applied to the score earned for each enemy kill
+- if the player takes too long between kills or gets hit, the combo resets back to 1×
+- a floating combo text should pop up near the kill to show the current streak (e.g. "×2 COMBO!", "×3 COMBO!")
+- the combo counter should be shown in the HUD
+
+*Reason*
+- the current scoring system feels flat; every kill gives the same reward regardless of skill
+- a combo system rewards aggressive, skillful play and makes high score chasing feel meaningful
+
+**GOAL**
+- to make the scoring loop feel dynamic and exciting without changing the core enemy/health balance
+
+---
+
+### change-2:
+- add a **between-level upgrade shop** that appears after the congratulations popup and before the level select screen
+- the shop should offer 3 randomly selected upgrades each time, chosen from a pool
+- the player spends score points to buy upgrades (each upgrade has a visible cost shown on the button)
+- upgrade pool examples:
+  - `Max Health Up` — permanently increases max health by 20
+  - `Max Shield Up` — permanently increases max shield capacity by 20
+  - `Extra Life` — adds 1 extra life
+  - `Faster Reload` — permanently reduces shoot cooldown by 10%
+  - `Missile Capacity` — permanently increases max missile carry count by 1
+  - `Shield Regen` — player slowly regenerates shield over time (passive)
+- a "Skip" button should always be available if the player doesn't want to spend
+- the shop screen should match the existing dark space theme with the same button style
+
+*Reason*
+- right now there is no meaningful use of the score during a run; it only matters for the leaderboard
+- a shop gives the player agency and makes every level feel like it is contributing to a meta-progression
+
+**GOAL**
+- to add a lightweight but satisfying upgrade loop that makes replaying levels and earning score feel purposeful
+
+---
+
+### change-3:
+- add **boss warning and cinematic intro** sequences before each boss fight
+- when the level system reaches a boss wave, show a full-screen red-tinted warning overlay with flashing "!! BOSS INCOMING !!" text for ~2 seconds before the boss spawns
+- the boss should then fly in from the top of the screen with a short entry animation rather than appearing instantly
+- during the warning phase the player cannot shoot or move (brief cinematic lock) so the moment feels dramatic
+- after the boss is defeated, show a short "BOSS DEFEATED" banner with a screen flash and bigger explosion particles before transitioning
+
+*Reason*
+- boss fights currently feel abrupt; the boss just appears with no build-up
+- a warning sequence signals danger clearly and makes the player feel the weight of the fight before it begins
+
+**GOAL**
+- to make boss encounters feel like proper climactic events with clear telegraphing and satisfying resolution
 
 ---
 
