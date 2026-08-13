@@ -38,6 +38,17 @@ class Game:
         self.state = MenuState(self)
         self.running = True
 
+        # Sprint 7: persistent upgrade bonuses purchased from the between-level shop.
+        # These accumulate across the whole run and are applied each time a PlayState is created.
+        self.upgrades = {
+            "max_health_bonus": 0,    # flat HP added to player max health
+            "max_shield_bonus": 0,    # flat shield added to player max shield
+            "extra_lives": 0,         # bonus lives granted at level start
+            "reload_reduction": 0.0,  # fraction to reduce shoot_cooldown (e.g. 0.1 = 10% faster)
+            "missile_capacity": 0,    # bonus starting missiles
+            "shield_regen_rate": 0.0, # shield points regenerated per second (passive)
+        }
+
     def change_state(self, new_state):
         """
         Switches the active game state.

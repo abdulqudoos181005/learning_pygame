@@ -13,6 +13,10 @@
     },
     {
         "name": "VICTOR",
+        "score": 13036
+    },
+    {
+        "name": "VICTOR",
         "score": 11750
     },
     {
@@ -34,9 +38,5 @@
     {
         "name": "RECRUIT",
         "score": 1000
-    },
-    {
-        "name": "VICTOR",
-        "score": 999
     }
 ]

@@ -392,6 +392,14 @@ class PlayState(State):
         self.selected_level = max(1, min(int(selected_level), 10))
         self.save_system = SaveSystem()
         self.kills_since_powerup = 0
+
+        # Sprint 7: Combo / score-multiplier system
+        self.combo_count      = 0      # consecutive kills within the time window
+        self.combo_timer      = 0.0    # seconds remaining before combo resets
+        self.combo_multiplier = 1.0    # current score multiplier (1×, 1.5×, 2×, … up to 5×)
+        self.COMBO_WINDOW     = 2.0    # seconds between kills to sustain the chain
+        self.COMBO_CAP        = 5.0    # maximum multiplier
+        self.COMBO_STEP       = 0.5    # multiplier increment per kill
         
         # SCREEN SHAKE DOUBLE BUFFERING:
         # We draw the entire game onto a separate offscreen Surface (self.canvas).
@@ -419,6 +427,21 @@ class PlayState(State):
         self.player.missile_count = 3
         self.player.activate_invincibility(4.0)
         self.asteroid_timer = 1.5
+
+        # Sprint 7: Apply persistent upgrade bonuses purchased from the shop
+        upgrades = getattr(self.game, "upgrades", {})
+        if upgrades.get("max_health_bonus", 0):
+            self.player.max_health += upgrades["max_health_bonus"]
+            self.player.health = self.player.max_health
+        if upgrades.get("max_shield_bonus", 0):
+            self.player.max_shield += upgrades["max_shield_bonus"]
+        if upgrades.get("extra_lives", 0):
+            self.player.lives += upgrades["extra_lives"]
+        if upgrades.get("reload_reduction", 0.0):
+            self.player.shoot_cooldown *= max(0.3, 1.0 - upgrades["reload_reduction"])
+        if upgrades.get("missile_capacity", 0):
+            self.player.missile_count += upgrades["missile_capacity"]
+        self.player.shield_regen_rate = upgrades.get("shield_regen_rate", 0.0)
         
         # Game stats
         self.score = 0
@@ -430,8 +453,9 @@ class PlayState(State):
         self.wave_intro_timer = 2.5
         
         # Boss tracking
-        self.boss_active   = False
-        self.boss_instance = None
+        self.boss_active        = False
+        self.boss_instance      = None
+        self.boss_warning_shown = False  # Sprint 7: ensures warning cinematic plays only once
 
         # Sprint 6 game-feel feedback
         self.damage_flash = 0.0
@@ -501,6 +525,18 @@ class PlayState(State):
             if item["life"] <= 0:
                 self.float_texts.remove(item)
 
+        # Sprint 7: Tick combo decay timer
+        if self.combo_timer > 0:
+            self.combo_timer -= dt
+            if self.combo_timer <= 0:
+                self.combo_count = 0
+                self.combo_multiplier = 1.0
+
+        # Sprint 7: Passive shield regen from upgrade shop
+        regen = getattr(self.player, "shield_regen_rate", 0.0)
+        if regen > 0:
+            self.player.shield = min(self.player.max_shield, self.player.shield + regen * dt)
+
         # 2. BACKGROUND ANIMATION
         self.starfield.update(dt)
 
@@ -519,6 +555,12 @@ class PlayState(State):
             spawn_type = self.level_sys.tick_spawn(dt)
             
             if spawn_type == "boss":
+                # Sprint 7: Show boss warning cinematic before spawning if not yet shown
+                if not self.boss_warning_shown:
+                    self.boss_warning_shown = True
+                    self.level_sys.spawned = 0  # allow boss tick to re-fire after warning
+                    self.game.change_state(BossWarningState(self.game, self))
+                    return
                 # Spawn the Boss with level-scaled multipliers
                 cfg = self.level_sys.current_wave_cfg
                 self.boss_instance = Boss(
@@ -547,6 +589,16 @@ class PlayState(State):
             # Check if wave/level is done (all spawned + all killed)
             if self.level_sys.wave_finished_spawning() and len(self.enemies) == 0:
                 cleared_level = self.level_sys.level_number
+
+                # Sprint 7: Boss defeated — show celebratory banner before advancing
+                if self.boss_active:
+                    self.boss_active = False
+                    self.boss_instance = None
+                    self.game.change_state(
+                        BossDefeatedState(self.game, self, cleared_level)
+                    )
+                    return
+
                 result = self.level_sys.advance_wave()
                 self.wave_intro_timer = 2.5
                 self.boss_active = False
@@ -555,7 +607,7 @@ class PlayState(State):
                 if result == "level":
                     # Persist any cleared intermediate level so the selector reflects progress.
                     self.save_system.save_progress(cleared_level)
-                    self.game.change_state(LevelCompleteState(self.game, self.score, cleared_level))
+                    self.game.change_state(ShopState(self.game, self.score, cleared_level))
                     return
                 elif result == "complete":
                     self.save_system.save_progress(self.selected_level, completed_levels=list(range(1, 11)))
@@ -651,12 +703,12 @@ class PlayState(State):
                 
                 # Apply laser damage (power laser = 20, normal = 10). get_hit returns True if enemy dies
                 if enemy.get_hit(laser.damage):
-                    self.score += enemy.score_value
+                    points = int(enemy.score_value * self.combo_multiplier)
+                    self.score += points
                     self.kills_since_powerup += 1
-                    self.spawn_floating_text(enemy.rect.centerx, enemy.rect.top, f"+{enemy.score_value}", color=(255, 210, 80))
+                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
-
                     # Determine powerup drop pool based on current level
                     self._try_drop_powerup(enemy)
 
@@ -670,9 +722,10 @@ class PlayState(State):
                 self.trigger_shake(0.4, 8)
                 
                 if enemy.get_hit(Missile.DAMAGE):
-                    self.score += enemy.score_value
+                    points = int(enemy.score_value * self.combo_multiplier)
+                    self.score += points
                     self.kills_since_powerup += 1
-                    self.spawn_floating_text(enemy.rect.centerx, enemy.rect.top, f"+{enemy.score_value}", color=(255, 160, 50))
+                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
                     self._try_drop_powerup(enemy)
 
         # 3. Enemy lasers hitting Player ship
@@ -685,6 +738,7 @@ class PlayState(State):
             
             # Apply damage to player. Returns True if player loses a life
             if self.player.get_hit(15):
+                self._reset_combo()  # Sprint 7: break combo on damage
                 self.trigger_damage_flash(0.5)
                 self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-15 HP", color=(255, 100, 100))
                 # Major blue explosion representing ship destruction
@@ -694,6 +748,7 @@ class PlayState(State):
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
             else:
+                self._reset_combo()  # Sprint 7: break combo on damage
                 self.trigger_damage_flash(0.2)
                 self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-15 HP", color=(255, 120, 120))
 
@@ -705,6 +760,7 @@ class PlayState(State):
             self.score += enemy.score_value // 2
             
             if self.player.get_hit(30):
+                self._reset_combo()  # Sprint 7: break combo on crash
                 self.trigger_damage_flash(0.6)
                 self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-30 HP", color=(255, 90, 90))
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
@@ -712,6 +768,7 @@ class PlayState(State):
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
             else:
+                self._reset_combo()  # Sprint 7: break combo on crash
                 self.trigger_damage_flash(0.25)
                 self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-30 HP", color=(255, 110, 110))
 
@@ -740,6 +797,24 @@ class PlayState(State):
             elif pup.type == "missile":
                 # Add one homing missile to inventory (Sprint 2 new)
                 self.player.missile_count += 1
+
+    def _register_kill(self, x, y, points):
+        """Sprint 7: Update combo chain after an enemy kill and show combo text."""
+        self.combo_count += 1
+        self.combo_timer = self.COMBO_WINDOW  # restart the decay window
+        if self.combo_count > 1:
+            # Increase multiplier (step each kill, cap at COMBO_CAP)
+            self.combo_multiplier = min(self.COMBO_CAP, 1.0 + (self.combo_count - 1) * self.COMBO_STEP)
+            combo_label = f"×{self.combo_multiplier:.1f} COMBO!"
+            self.spawn_floating_text(x, y - 20, combo_label, color=(255, 230, 50), life=1.0, drift_y=-40)
+        else:
+            self.spawn_floating_text(x, y, f"+{points}", color=(255, 210, 80))
+
+    def _reset_combo(self):
+        """Sprint 7: Reset the combo chain (called on player damage)."""
+        self.combo_count = 0
+        self.combo_timer = 0.0
+        self.combo_multiplier = 1.0
 
     def _try_drop_powerup(self, enemy):
         """
@@ -818,6 +893,15 @@ class PlayState(State):
         # 1. SCORE
         score_surf = self.game.assets.font.render(f"SCORE: {self.score}", True, (255, 255, 255))
         self.canvas.blit(score_surf, (25, 20))
+
+        # Sprint 7: Combo counter (shown below score when active)
+        if self.combo_count > 1:
+            combo_alpha = min(255, int(self.combo_timer / self.COMBO_WINDOW * 255))
+            mx = self.combo_multiplier
+            combo_color = (255, int(230 - (mx - 1) * 25), max(0, int(100 - (mx - 1) * 15)))
+            combo_surf = self.game.assets.font.render(f"COMBO  ×{mx:.1f}  [{self.combo_count} KILLS]", True, combo_color)
+            combo_surf.set_alpha(combo_alpha)
+            self.canvas.blit(combo_surf, (25, 42))
         
         # 2. LEVEL & WAVE TRACKER (Sprint 2: shows both level and wave)
         if self.level_sys.is_boss_wave:
@@ -1099,6 +1183,384 @@ class GameOverState(State):
         screen.blit(hint, hint_rect)
 
 
+# ---------------------------------------------------------------------------
+# Sprint 7 — BossWarningState
+# ---------------------------------------------------------------------------
+class BossWarningState(State):
+    """
+    Sprint 7 — Full-screen cinematic warning shown before a boss spawns.
+    
+    Displays a red-tinted overlay with flashing "!! BOSS INCOMING !!" text for
+    ~2.5 s, then resumes the PlayState so the boss can fly in from the top.
+    The player cannot move or shoot during the warning (cinematic lock).
+    """
+    DURATION = 2.6  # seconds
+
+    def __init__(self, game, play_state):
+        super().__init__(game)
+        self.play_state = play_state
+        self.timer = 0.0
+        self.done = False
+
+    def handle_events(self, events):
+        pass  # lock all input during cinematic
+
+    def update(self, dt):
+        self.timer += dt
+        if self.timer >= self.DURATION and not self.done:
+            self.done = True
+            # Unfreeze the play state — boss wave will proceed normally
+            self.game.change_state(self.play_state)
+
+    def draw(self, screen):
+        # Render the frozen gameplay in the background
+        self.play_state.draw(screen)
+
+        # Darkening red tint layer, intensity pulses with the flash timer
+        flash_intensity = abs(math.sin(self.timer * 5.5))
+        overlay = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
+        overlay.fill((180, 0, 0, int(90 + 80 * flash_intensity)))
+        screen.blit(overlay, (0, 0))
+
+        # Animated scan-line stripes for drama
+        for sy in range(0, self.game.height, 10):
+            stripe = pg.Surface((self.game.width, 3), pg.SRCALPHA)
+            stripe.fill((0, 0, 0, 40))
+            screen.blit(stripe, (0, sy))
+
+        # "!! BOSS INCOMING !!" text — scales with the flash pulse
+        if self.game.level_sys_level_number if hasattr(self.game, 'level_sys_level_number') else False:
+            label_str = "!! FINAL BOSS APPROACHING !!"
+        else:
+            label_str = "!! BOSS INCOMING !!"
+        # Determine from play_state's level_sys
+        if self.play_state.level_sys.level_number == 10:
+            label_str = "!! FINAL BOSS APPROACHING !!"
+
+        scale = 1.0 + 0.12 * flash_intensity
+        text_surf = self.game.assets.title_font.render(label_str, True, (255, 60, 60))
+        w = int(text_surf.get_width() * scale)
+        h = int(text_surf.get_height() * scale)
+        scaled = pg.transform.smoothscale(text_surf, (w, h))
+        screen.blit(scaled, scaled.get_rect(center=(self.game.width // 2, self.game.height // 2 - 40)))
+
+        sub_surf = self.game.assets.font.render("Brace yourself, pilot!", True, (255, 200, 200))
+        screen.blit(sub_surf, sub_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + 40)))
+
+        # Countdown bar
+        progress = max(0.0, 1.0 - self.timer / self.DURATION)
+        bar_w = int(400 * progress)
+        pg.draw.rect(screen, (80, 0, 0), (self.game.width // 2 - 200, self.game.height // 2 + 90, 400, 10), border_radius=5)
+        if bar_w > 0:
+            pg.draw.rect(screen, (255, 60, 60), (self.game.width // 2 - 200, self.game.height // 2 + 90, bar_w, 10), border_radius=5)
+
+
+# ---------------------------------------------------------------------------
+# Sprint 7 — BossDefeatedState
+# ---------------------------------------------------------------------------
+class BossDefeatedState(State):
+    """
+    Sprint 7 — Short celebratory screen shown immediately after a boss dies.
+    Displays "BOSS DEFEATED" with a screen flash, then returns to
+    the normal level-advance flow.
+    """
+    DURATION = 2.8
+
+    def __init__(self, game, play_state, cleared_level):
+        super().__init__(game)
+        self.play_state = play_state
+        self.cleared_level = int(cleared_level)
+        self.timer = 0.0
+        self.done = False
+        self.particles = pg.sprite.Group()
+        # Spawn a huge celebratory explosion in the centre of the screen
+        from fx import spawn_explosion
+        spawn_explosion(self.particles, game.width // 2, game.height // 2,
+                        color=(255, 200, 50), count=80, speed_range=(100, 500))
+        spawn_explosion(self.particles, game.width // 2, game.height // 2,
+                        color=(255, 80, 0), count=50, speed_range=(60, 350))
+
+    def handle_events(self, events):
+        pass
+
+    def update(self, dt):
+        self.timer += dt
+        self.particles.update(dt)
+        if self.timer >= self.DURATION and not self.done:
+            self.done = True
+            # Now actually advance the wave in the underlying play_state
+            save_sys = self.play_state.save_system
+            level_sys = self.play_state.level_sys
+            score = self.play_state.score
+            result = level_sys.advance_wave()
+            self.play_state.wave_intro_timer = 2.5
+            self.play_state.player.base_laser_tier = self.play_state._laser_tier_for_level(level_sys.level_number)
+            if result == "level":
+                save_sys.save_progress(self.cleared_level)
+                self.game.change_state(ShopState(self.game, score, self.cleared_level))
+            elif result == "complete":
+                save_sys.save_progress(self.play_state.selected_level, completed_levels=list(range(1, 11)))
+                self.game.change_state(GameCompleteState(self.game, score))
+            else:
+                # Just continue playing (next wave)
+                self.game.change_state(self.play_state)
+
+    def draw(self, screen):
+        self.play_state.draw(screen)
+        self.particles.draw(screen)
+
+        # White flash that fades with time
+        flash_alpha = max(0, int(180 * (1.0 - self.timer / 0.5)))
+        if flash_alpha > 0:
+            flash = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
+            flash.fill((255, 255, 255, flash_alpha))
+            screen.blit(flash, (0, 0))
+
+        # "BOSS DEFEATED" title
+        pulse = 1.0 + 0.1 * math.sin(self.timer * 6)
+        title_color = (
+            255,
+            int(200 + 55 * abs(math.sin(self.timer * 4))),
+            0,
+        )
+        text_surf = self.game.assets.title_font.render("BOSS DEFEATED", True, title_color)
+        w = int(text_surf.get_width() * pulse)
+        h = int(text_surf.get_height() * pulse)
+        scaled = pg.transform.smoothscale(text_surf, (max(1, w), max(1, h)))
+        screen.blit(scaled, scaled.get_rect(center=(self.game.width // 2, self.game.height // 2 - 30)))
+
+        sub = self.game.assets.font.render("Excellent work, pilot!", True, (200, 255, 200))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, self.game.height // 2 + 50)))
+
+
+# ---------------------------------------------------------------------------
+# Sprint 7 — ShopState (between-level upgrade shop)
+# ---------------------------------------------------------------------------
+
+# Full upgrade pool — 3 are randomly picked each time
+_UPGRADE_POOL = [
+    {
+        "id": "max_health_bonus",
+        "name": "Max Health +20",
+        "desc": "Permanently raises your HP ceiling by 20",
+        "cost": 300,
+        "icon": (0, 220, 100),
+        "step": 20,
+    },
+    {
+        "id": "max_shield_bonus",
+        "name": "Max Shield +20",
+        "desc": "Permanently raises your shield ceiling by 20",
+        "cost": 280,
+        "icon": (0, 180, 255),
+        "step": 20,
+    },
+    {
+        "id": "extra_lives",
+        "name": "Extra Life",
+        "desc": "Adds 1 spare life for the next level",
+        "cost": 500,
+        "icon": (255, 200, 0),
+        "step": 1,
+    },
+    {
+        "id": "reload_reduction",
+        "name": "Faster Reload",
+        "desc": "Reduces shoot cooldown by 10% (stacks)",
+        "cost": 350,
+        "icon": (255, 120, 0),
+        "step": 0.10,
+    },
+    {
+        "id": "missile_capacity",
+        "name": "Missile Rack +1",
+        "desc": "Start each level with 1 extra missile",
+        "cost": 250,
+        "icon": (255, 80, 0),
+        "step": 1,
+    },
+    {
+        "id": "shield_regen_rate",
+        "name": "Shield Regen",
+        "desc": "Slowly regenerates shield points over time",
+        "cost": 400,
+        "icon": (100, 200, 255),
+        "step": 5.0,
+    },
+]
+
+
+class ShopState(State):
+    """
+    Sprint 7 — Between-level upgrade shop.
+    
+    Shows 3 randomly selected upgrades from the pool; the player spends
+    accumulated score to buy them.  A "Skip" button is always available.
+    Purchased bonuses are stored in `game.upgrades` and applied the next
+    time PlayState creates the player.
+    """
+    NUM_OFFERS = 3
+
+    def __init__(self, game, score, cleared_level):
+        super().__init__(game)
+        self.score = score
+        self.cleared_level = int(cleared_level)
+        self.starfield = Starfield(self.game.width, self.game.height, num_stars=80)
+        self.timer = 0.0
+        self.purchased = set()   # indices of already-bought offers
+        self.hovered = None
+        self.skip_hovered = False
+        self.transition_locked = False
+
+        # Randomly choose 3 distinct upgrades from the pool
+        self.offers = random.sample(_UPGRADE_POOL, self.NUM_OFFERS)
+
+        # Build button rects
+        card_w, card_h = 310, 160
+        total_w = self.NUM_OFFERS * card_w + (self.NUM_OFFERS - 1) * 30
+        start_x = (self.game.width - total_w) // 2
+        self.card_rects = []
+        for i in range(self.NUM_OFFERS):
+            x = start_x + i * (card_w + 30)
+            y = self.game.height // 2 - card_h // 2 + 20
+            self.card_rects.append(pg.Rect(x, y, card_w, card_h))
+
+        self.skip_rect = pg.Rect(self.game.width // 2 - 110, self.game.height - 110, 220, 52)
+
+    def _proceed(self):
+        if self.transition_locked:
+            return
+        self.transition_locked = True
+        self.game.change_state(LevelSelectState(self.game))
+
+    def handle_events(self, events):
+        if self.transition_locked:
+            return
+        for event in events:
+            if event.type == pg.MOUSEMOTION:
+                mp = event.pos
+                self.skip_hovered = self.skip_rect.collidepoint(mp)
+                self.hovered = None
+                for i, rect in enumerate(self.card_rects):
+                    if rect.collidepoint(mp):
+                        self.hovered = i
+                        break
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                mp = event.pos
+                if self.skip_rect.collidepoint(mp):
+                    self._proceed()
+                    return
+                for i, rect in enumerate(self.card_rects):
+                    if rect.collidepoint(mp) and i not in self.purchased:
+                        self._buy(i)
+                        return
+            elif event.type == pg.KEYDOWN:
+                if event.key == pg.K_ESCAPE:
+                    self._proceed()
+
+    def _buy(self, idx):
+        offer = self.offers[idx]
+        if self.score < offer["cost"]:
+            return  # not enough score
+        self.score -= offer["cost"]
+        self.purchased.add(idx)
+        # Accumulate bonus in game.upgrades
+        uid = offer["id"]
+        if uid not in self.game.upgrades:
+            self.game.upgrades[uid] = 0.0 if isinstance(offer["step"], float) else 0
+        self.game.upgrades[uid] = self.game.upgrades.get(uid, 0) + offer["step"]
+
+    def update(self, dt):
+        self.starfield.update(dt)
+        self.timer += dt
+
+    def draw(self, screen):
+        screen.fill((8, 10, 24))
+        self.starfield.draw(screen)
+
+        # Header
+        title = self.game.assets.title_font.render("UPGRADE SHOP", True, (255, 210, 0))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 90)))
+
+        sub = self.game.assets.font.render(
+            f"Level {self.cleared_level} cleared!  Score: {self.score}   — Spend wisely, pilot",
+            True, (180, 200, 220)
+        )
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 145)))
+
+        for i, (offer, rect) in enumerate(zip(self.offers, self.card_rects)):
+            bought = i in self.purchased
+            hovered = self.hovered == i
+            can_afford = self.score >= offer["cost"]
+
+            # Card background
+            if bought:
+                fill = (20, 70, 30)
+                border = (80, 220, 100)
+            elif not can_afford:
+                fill = (30, 30, 40)
+                border = (80, 80, 90)
+            elif hovered:
+                fill = (30, 60, 90)
+                border = (0, 220, 255)
+            else:
+                fill = (20, 35, 55)
+                border = (80, 130, 180)
+
+            card = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+            card.fill((0, 0, 0, 0))
+            pg.draw.rect(card, (*fill, 220), card.get_rect(), border_radius=14)
+            pg.draw.rect(card, (*border, 255), card.get_rect(), 2, border_radius=14)
+            if hovered and not bought and can_afford:
+                # Subtle inner glow
+                glow = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+                pg.draw.rect(glow, (0, 200, 255, 18), glow.get_rect(), border_radius=14)
+                card.blit(glow, (0, 0))
+            screen.blit(card, rect)
+
+            # Icon circle
+            icon_x, icon_y = rect.x + 30, rect.y + 35
+            pg.draw.circle(screen, offer["icon"], (icon_x, icon_y), 18)
+            pg.draw.circle(screen, (255, 255, 255), (icon_x, icon_y), 18, 2)
+
+            # Name
+            name_surf = self.game.assets.font.render(offer["name"], True,
+                (200, 220, 200) if bought else (255, 255, 255) if can_afford else (120, 120, 130))
+            screen.blit(name_surf, (rect.x + 58, rect.y + 24))
+
+            # Description
+            desc_surf = self.game.assets.hud_font.render(offer["desc"], True, (160, 180, 200))
+            screen.blit(desc_surf, (rect.x + 15, rect.y + 68))
+
+            # Cost / Bought label
+            if bought:
+                label = self.game.assets.font.render("✓ PURCHASED", True, (100, 255, 130))
+            else:
+                cost_color = (255, 200, 50) if can_afford else (180, 80, 80)
+                label = self.game.assets.font.render(f"Cost: {offer['cost']} pts", True, cost_color)
+            screen.blit(label, (rect.x + 15, rect.y + 110))
+
+            # Hover buy hint
+            if hovered and not bought and can_afford:
+                hint = self.game.assets.hud_font.render("Click to buy", True, (0, 230, 255))
+                screen.blit(hint, (rect.x + 15, rect.y + 135))
+
+        # Skip button
+        _draw_ui_button(
+            screen, self.skip_rect, "SKIP →",
+            self.game.assets.font,
+            hovered=self.skip_hovered,
+            fill=(30, 40, 58, 220),
+            border=(180, 180, 200, 255) if self.skip_hovered else (100, 110, 140, 255),
+            text_color=(200, 210, 230),
+            pulse=self.timer * 8,
+        )
+
+        hint = self.game.assets.hud_font.render("You can buy multiple upgrades if you can afford them  |  ESC or SKIP to continue",
+                                                 True, (80, 100, 120))
+        screen.blit(hint, hint.get_rect(center=(self.game.width // 2, self.game.height - 60)))
+
+
 class LevelCompleteState(State):
     """Short congratulation popup shown immediately after a level clears."""
     def __init__(self, game, score, cleared_level):
@@ -1115,7 +1577,7 @@ class LevelCompleteState(State):
         if self.transition_locked:
             return
         self.transition_locked = True
-        self.game.change_state(LevelSelectState(self.game))
+        self.game.change_state(ShopState(self.game, self.score, self.cleared_level))
 
     def handle_events(self, events):
         if self.transition_locked:
@@ -1150,7 +1612,7 @@ class LevelCompleteState(State):
         _draw_ui_button(
             screen,
             self.continue_rect,
-            "RETURN TO LEVELS",
+            "CONTINUE TO SHOP",
             self.game.assets.font,
             hovered=self.continue_hovered,
             fill=(20, 70, 90, 220),
