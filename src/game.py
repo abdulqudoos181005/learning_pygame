@@ -1,4 +1,5 @@
 
+# pyrefly: ignore [missing-import]
 import pygame as pg
 import sys
 from assets_loader import AssetsLoader

@@ -4,6 +4,10 @@
         "score": 23925
     },
     {
+        "name": "VICTOR",
+        "score": 13310
+    },
+    {
         "name": "QUDOOS",
         "score": 13275
     },
@@ -14,6 +18,10 @@
     {
         "name": "VICTOR",
         "score": 13036
+    },
+    {
+        "name": "VICTOR",
+        "score": 12421
     },
     {
         "name": "VICTOR",
@@ -30,13 +38,5 @@
     {
         "name": "PILOT",
         "score": 5000
-    },
-    {
-        "name": "PILOT",
-        "score": 1234
-    },
-    {
-        "name": "RECRUIT",
-        "score": 1000
     }
 ]

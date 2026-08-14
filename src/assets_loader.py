@@ -18,20 +18,132 @@ class AssetsLoader:
         self.images = {}
         self.sounds = {}
         self.font = None
+        self.title_font = None
+        self.hud_font = None
         
         # Calculate base directory paths
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.assets_dir = os.path.join(self.base_dir, "assets")
-        self.images_dir = os.path.join(self.assets_dir, "images")
-        self.sounds_dir = os.path.join(self.assets_dir, "sounds")
         self.fonts_dir = os.path.join(self.assets_dir, "fonts")
         
-        # Initialize default system fonts. Fallback to default sans-serif font
-        # if "Trebuchet MS" is not installed on the operating system.
+        # Build fast lookup indexes for organized assets
+        self._image_index = {}
+        self._sound_index = {}
+        self._build_asset_indexes()
+        
+        # Semantic aliases for instant backward compatibility & intuitive game entity mapping
+        self._aliases = {
+            # Player Ships
+            "player": "player_fleet/interceptor_strike_blue",
+            "player_interceptor": "player_fleet/interceptor_strike_blue",
+            "player_cruiser": "player_fleet/heavy_cruiser_assault_blue",
+            "player_vanguard": "player_fleet/stealth_vanguard_bomber_blue",
+            
+            # Enemies
+            "enemy_scout": "alien_armada/bio_swarm/bio_scout_dart",
+            "enemy_stinger": "alien_armada/crimson_raiders/crimson_wasp_stinger",
+            "enemy_cruiser": "alien_armada/shadow_corps/shadow_heavy_cruiser",
+            "boss": "alien_armada/boss_motherships/mothership_saucer_crimson_red",
+            
+            # Lasers & Projectiles
+            "laser_player": "weapons_projectiles/blue_photon_beams/laser_blue_stream_long",
+            "laser_enemy": "weapons_projectiles/red_crimson_beams/laser_red_stream_long",
+            "laser_power": "weapons_projectiles/red_crimson_beams/laser_red_heavy_slug",
+            "laser_tier3": "weapons_projectiles/blue_photon_beams/laser_blue_wide_wave",
+            "laser_boss": "weapons_projectiles/green_plasma_beams/laser_green_wide_wave",
+            
+            # Power-ups & Pickups
+            "powerup_shield": "powerups_pickups/powerup_orbs/orb_shield_blue",
+            "powerup_triple": "powerups_pickups/powerup_orbs/orb_star_red",
+            "powerup_health": "powerups_pickups/medical_capsules/capsule_health_green",
+            "powerup_power_laser": "powerups_pickups/powerup_orbs/orb_bolt_red",
+            "powerup_missile": "powerups_pickups/powerup_orbs/orb_bolt_yellow",
+            "powerup_speed": "powerups_pickups/medical_capsules/capsule_velocity_yellow",
+            
+            # Audio
+            "laser": "audio/sfx/laser_blaster_crisp",
+            "laser_pew": "audio/sfx/laser_retro_pew_01",
+            "boss_music": "audio/music/theme_boss_arcade_battle",
+            "player_death": "audio/sfx/player_death_alarm",
+            "game_over": "audio/sfx/game_over_defeat",
+            "shield_up": "audio/sfx/shield_activate",
+            "shield_down": "audio/sfx/shield_depleted",
+            "powerup": "audio/sfx/powerup_bonus_chime",
+            "zap": "audio/sfx/alien_emp_zap",
+        }
+        
+        # Initialize fonts with custom TTF fonts if present, falling back to SysFont
         pg.font.init()
-        self.font = pg.font.SysFont("Trebuchet MS", 24)
-        self.title_font = pg.font.SysFont("Trebuchet MS", 48)
-        self.hud_font = pg.font.SysFont("Trebuchet MS", 20)
+        font_path = os.path.join(self.fonts_dir, "vector_future_bold.ttf")
+        alt_font_path = os.path.join(self.fonts_dir, "audiowide_cyber_display.ttf")
+        
+        chosen_font = font_path if os.path.exists(font_path) else (alt_font_path if os.path.exists(alt_font_path) else None)
+        if chosen_font:
+            try:
+                self.font = pg.font.Font(chosen_font, 22)
+                self.title_font = pg.font.Font(chosen_font, 46)
+                self.hud_font = pg.font.Font(chosen_font, 18)
+            except Exception:
+                chosen_font = None
+                
+        if chosen_font is None:
+            self.font = pg.font.SysFont("Trebuchet MS", 24)
+            self.title_font = pg.font.SysFont("Trebuchet MS", 48)
+            self.hud_font = pg.font.SysFont("Trebuchet MS", 20)
+
+    def _build_asset_indexes(self):
+        """Scans the assets directory tree and indexes files for fast O(1) resolution."""
+        if not os.path.exists(self.assets_dir):
+            return
+            
+        for root, _, files in os.walk(self.assets_dir):
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                rel_path = os.path.relpath(os.path.join(root, file), self.assets_dir).replace("\\", "/")
+                key_without_ext = os.path.splitext(rel_path)[0]
+                base_name = os.path.splitext(file)[0]
+                full_path = os.path.join(root, file)
+                
+                if ext in (".png", ".jpg", ".jpeg"):
+                    self._image_index[key_without_ext] = full_path
+                    self._image_index[base_name] = full_path
+                    self._image_index[rel_path] = full_path
+                elif ext in (".wav", ".ogg", ".mp3"):
+                    self._sound_index[key_without_ext] = full_path
+                    self._sound_index[base_name] = full_path
+                    self._sound_index[rel_path] = full_path
+
+    def _resolve_image_path(self, name):
+        """Resolves an image name using aliases, indexed paths, or meteor/asteroid rules."""
+        # 1. Check direct alias
+        mapped_name = self._aliases.get(name, name)
+        if mapped_name in self._image_index:
+            return self._image_index[mapped_name]
+            
+        # 2. Check base name directly in index
+        if name in self._image_index:
+            return self._image_index[name]
+            
+        # 3. Dynamic asteroid matching (e.g., asteroid_large_brown -> space_hazards/carbon_meteors/meteor_carbon_titan_01)
+        if name.startswith("asteroid_"):
+            parts = name.split("_")
+            size = parts[1] if len(parts) > 1 else "large"
+            color = parts[2] if len(parts) > 2 else "brown"
+            cat = "carbon_meteors" if color == "brown" else "iron_meteors"
+            color_slug = "carbon" if color == "brown" else "iron"
+            
+            size_map = {
+                "large": "titan_01",
+                "medium": "medium_01",
+                "small": "small_01",
+                "tiny": "tiny_debris_01"
+            }
+            meteor_file = f"meteor_{color_slug}_{size_map.get(size, 'titan_01')}"
+            key = f"space_hazards/{cat}/{meteor_file}"
+            if key in self._image_index:
+                return self._image_index[key]
+                
+        return None
 
     def get_image(self, name, width=None, height=None):
         """
@@ -44,17 +156,16 @@ class AssetsLoader:
         if key in self.images:
             return self.images[key]
             
-        img_path = os.path.join(self.images_dir, f"{name}.png")
+        img_path = self._resolve_image_path(name)
         surface = None
         
-        # Try loading the PNG file from assets/images/
-        if os.path.exists(img_path):
+        # Try loading the PNG file
+        if img_path and os.path.exists(img_path):
             try:
-                # convert_alpha() translates the image pixel format to optimize blitting speed
-                # and preserves transparency (alpha channel) information.
-                surface = pg.image.load(img_path).convert_alpha()
+                raw_surf = pg.image.load(img_path)
+                surface = raw_surf.convert_alpha() if pg.display.get_surface() is not None else raw_surf
             except Exception as e:
-                print(f"Warning: Failed to load image {name}.png: {e}")
+                print(f"Warning: Failed to load image {name} ({img_path}): {e}")
                 
         # If the file is missing or failed to load, generate high-quality procedural vector art
         if surface is None:
@@ -75,21 +186,20 @@ class AssetsLoader:
         if name in self.sounds:
             return self.sounds[name]
             
-        sound_path = os.path.join(self.sounds_dir, f"{name}.wav")
+        mapped_name = self._aliases.get(name, name)
+        sound_path = self._sound_index.get(mapped_name) or self._sound_index.get(name)
         sound = None
         
         # Check if the pygame audio mixer is initialized and active
         if pg.mixer.get_init():
-            if os.path.exists(sound_path):
+            if sound_path and os.path.exists(sound_path):
                 try:
                     sound = pg.mixer.Sound(sound_path)
                 except Exception as e:
-                    print(f"Warning: Failed to load sound {name}.wav: {e}")
+                    print(f"Warning: Failed to load sound {name} ({sound_path}): {e}")
             
-            # If WAV file is missing, create a mock sound class
+            # If audio file is missing or failed, create a mock sound class
             if sound is None:
-                # Dummy class implements standard mixer.Sound interface so calls
-                # to sound.play() or sound.stop() will do nothing rather than crash the game.
                 class DummySound:
                     def play(self, *args, **kwargs): pass
                     def stop(self): pass
