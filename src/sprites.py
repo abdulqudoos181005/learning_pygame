@@ -51,6 +51,8 @@ class Player(pg.sprite.Sprite):
 
         if self.shield > 0:
             self.shield -= damage
+            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                self.game.assets.get_sound("shield_down").play()
             if self.shield < 0:
                 self.health += self.shield # Apply remaining damage to health
                 self.shield = 0
@@ -66,6 +68,8 @@ class Player(pg.sprite.Sprite):
             self.health = self.max_health
             self.shield = 0
             self.activate_invincibility(4.0)
+            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                self.game.assets.get_sound("player_death").play()
             # Reset position
             self.rect.center = (self.game.width // 2, self.game.height - 80)
             return True # Died
@@ -141,6 +145,8 @@ class Player(pg.sprite.Sprite):
     def shoot(self):
         if self.shoot_timer <= 0:
             self.shoot_timer = self.shoot_cooldown
+            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                self.game.assets.get_sound("laser").play()
             
             # Retrieve laser groups from active state
             state = self.game.state
@@ -174,6 +180,8 @@ class Player(pg.sprite.Sprite):
             return
         
         self.missile_count -= 1
+        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("laser_pew").play()
         missile = Missile(self.game, self.rect.centerx, self.rect.top, state.enemies)
         state.missiles.add(missile)
         state.all_sprites.add(missile)
@@ -303,6 +311,9 @@ class Enemy(pg.sprite.Sprite):
         if not hasattr(state, 'enemy_lasers'):
             return
             
+        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("laser_pew").play()
+
         if self.type == "stinger":
             # Shoot standard red laser down
             laser = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=400)
@@ -379,6 +390,9 @@ class Boss(pg.sprite.Sprite):
         state = self.game.state
         if not hasattr(state, 'enemy_lasers'):
             return
+
+        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("laser_pew").play()
 
         if self.attack_phase == 1:
             # Fire standard red lasers from left and right gun pods

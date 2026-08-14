@@ -666,6 +666,8 @@ class PlayState(State):
             for laser in lasers:
                 if asteroid.get_hit(laser.damage):
                     spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(170, 120, 80), count=24)
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("zap").play()
                     self._break_asteroid(asteroid)
                     self.score += asteroid.max_health // 2
                     break
@@ -676,6 +678,8 @@ class PlayState(State):
             for _ in missiles_hit:
                 if asteroid.get_hit(Missile.DAMAGE):
                     spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(255, 150, 0), count=30)
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("zap").play()
                     self._break_asteroid(asteroid)
                     self.score += asteroid.max_health // 2
 
@@ -687,6 +691,8 @@ class PlayState(State):
             if self.player.get_hit(asteroid.damage):
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
                 if self.player.lives <= 0:
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("player_death").play()
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
 
@@ -709,6 +715,8 @@ class PlayState(State):
                     self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("zap").play()
                     # Determine powerup drop pool based on current level
                     self._try_drop_powerup(enemy)
 
@@ -726,6 +734,8 @@ class PlayState(State):
                     self.score += points
                     self.kills_since_powerup += 1
                     self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("zap").play()
                     self._try_drop_powerup(enemy)
 
         # 3. Enemy lasers hitting Player ship
@@ -745,6 +755,8 @@ class PlayState(State):
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
                 # If out of lives, transition to GameOver State
                 if self.player.lives <= 0:
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("player_death").play()
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
             else:
@@ -765,6 +777,8 @@ class PlayState(State):
                 self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, "-30 HP", color=(255, 90, 90))
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
                 if self.player.lives <= 0:
+                    if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("player_death").play()
                     self.game.change_state(GameOverState(self.game, self.score))
                     return
             else:
@@ -780,9 +794,15 @@ class PlayState(State):
             self.spawn_floating_text(pup.rect.centerx, pup.rect.top, "POWER UP", color=(120, 255, 200))
 
             if pup.type == "shield":
+                if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                    self.game.assets.get_sound("shield_up").play()
                 # Recharge player shield points
                 self.player.shield = min(self.player.max_shield, self.player.shield + 40)
-            elif pup.type == "triple":
+            else:
+                if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                    self.game.assets.get_sound("powerup").play()
+
+            if pup.type == "triple":
                 # Activate triple firing guns for 12 seconds (Sprint 2: increased from 8)
                 self.player.triple_shot_timer = 12.0
             elif pup.type == "speed":
@@ -1098,6 +1118,8 @@ class GameOverState(State):
     def __init__(self, game, score):
         super().__init__(game)
         self.score = score
+        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("game_over").play()
         self.save_system = SaveSystem()
         self.player_name = ""
         self.save_rect = pg.Rect(self.game.width // 2 - 135, self.game.height // 2 + 110, 270, 52)
@@ -1201,6 +1223,8 @@ class BossWarningState(State):
         self.play_state = play_state
         self.timer = 0.0
         self.done = False
+        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("boss_music").play()
 
     def handle_events(self, events):
         pass  # lock all input during cinematic

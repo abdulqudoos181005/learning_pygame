@@ -25,6 +25,10 @@
     },
     {
         "name": "VICTOR",
+        "score": 12356
+    },
+    {
+        "name": "VICTOR",
         "score": 11750
     },
     {
@@ -34,9 +38,5 @@
     {
         "name": "COMMANDER",
         "score": 10000
-    },
-    {
-        "name": "PILOT",
-        "score": 5000
     }
 ]
