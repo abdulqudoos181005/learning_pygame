@@ -10,34 +10,49 @@ from level_system import LevelSystem
 
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
                     fill=(22, 34, 56, 220), border=(90, 120, 150, 255),
-                    text_color=(240, 240, 240), pulse=0.0):
+                    text_color=(240, 240, 240), pulse=0.0, danger=False):
     """Shared helper for consistent, mouse-friendly arcade buttons.
 
     All future UI elements can reuse this helper so hover and click feedback
     stays visually uniform without duplicating the button drawing logic.
+    Supports danger=True for crimson/ruby red highlight feedback on destructive actions.
     """
     panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
     panel.fill((0, 0, 0, 0))
 
-    fill_r, fill_g, fill_b, fill_a = fill
-    border_r, border_g, border_b, border_a = border
-
-    if hovered:
+    if danger and (hovered or pressed):
+        fill = (65, 15, 25, 240)
+        border = (255, 60, 80, 255)
+        text_color = (255, 140, 160)
+        if pressed:
+            fill = (90, 20, 30, 255)
+            border = (255, 100, 120, 255)
+            text_color = (255, 180, 190)
+    elif hovered:
+        fill_r, fill_g, fill_b, fill_a = fill
+        border_r, border_g, border_b, border_a = border
         fill_r = min(255, fill_r + 22)
         fill_g = min(255, fill_g + 36)
         fill_b = min(255, fill_b + 42)
         border_r = min(255, border_r + 20)
         border_g = min(255, border_g + 40)
         border_b = min(255, border_b + 60)
-
-    if pressed:
+        fill = (fill_r, fill_g, fill_b, fill_a)
+        border = (border_r, border_g, border_b, border_a)
+    elif pressed:
+        fill_r, fill_g, fill_b, fill_a = fill
+        border_r, border_g, border_b, border_a = border
         fill_r = max(0, fill_r - 14)
         fill_g = max(0, fill_g - 12)
         fill_b = max(0, fill_b - 18)
         border_r = min(255, border_r + 24)
         border_g = min(255, border_g + 40)
         border_b = min(255, border_b + 50)
+        fill = (fill_r, fill_g, fill_b, fill_a)
+        border = (border_r, border_g, border_b, border_a)
 
+    fill_r, fill_g, fill_b, fill_a = fill
+    border_r, border_g, border_b, border_a = border
     pulse_alpha = int(fill_a + (24 * math.sin(pulse) if pulse else 0))
     panel.fill((fill_r, fill_g, fill_b, max(0, min(255, pulse_alpha))))
     pg.draw.rect(panel, (border_r, border_g, border_b, border_a), panel.get_rect(), 2, border_radius=10)
@@ -78,7 +93,7 @@ class MenuState(State):
     """
     State representing the Main Menu screen.
     
-    Provides option selection (Play, High Scores, Quit) and a background starfield.
+    Provides option selection (Play, Flight Manual, High Scores, Quit) and animated starfield.
     """
     def __init__(self, game):
         super().__init__(game)
@@ -90,10 +105,10 @@ class MenuState(State):
         
         # Render the menu title with a nice neon-cyan color
         self.title_text = self.game.assets.title_font.render("SPACE SHOOTERS", True, (0, 255, 200))
-        self.title_rect = self.title_text.get_rect(center=(self.game.width // 2, self.game.height // 3))
+        self.title_rect = self.title_text.get_rect(center=(self.game.width // 2, self.game.height // 3.4))
         
         # Available choices and navigation cursor index
-        self.options = ["Play Game", "High Scores", "Quit"]
+        self.options = ["Play Game", "Flight Manual", "High Scores", "Quit"]
         self.selected_index = 0
         self.hovered_index = None
         self.buttons = []
@@ -102,7 +117,7 @@ class MenuState(State):
     def _build_buttons(self):
         self.buttons = []
         for idx, option in enumerate(self.options):
-            rect = pg.Rect(self.game.width // 2 - 170, self.game.height // 2 - 15 + idx * 55, 340, 46)
+            rect = pg.Rect(self.game.width // 2 - 170, int(self.game.height * 0.44) + idx * 56, 340, 46)
             self.buttons.append({"label": option, "rect": rect})
 
     def handle_events(self, events):
@@ -142,12 +157,15 @@ class MenuState(State):
         """Executes the action corresponding to the highlighted option."""
         idx = self.selected_index if idx is None else idx
         if idx == 0:
-            # Transition to the new level-selection screen before active gameplay.
+            # Transition to level-selection screen
             self.game.change_state(LevelSelectState(self.game))
         elif idx == 1:
+            # Transition to dedicated Flight Manual / Mechanics guide
+            self.game.change_state(InstructionsState(self.game))
+        elif idx == 2:
             # Transition to high scores leaderboard
             self.game.change_state(HighScoresState(self.game))
-        elif idx == 2:
+        elif idx == 3:
             # Exit game
             self.game.quit()
 
@@ -169,7 +187,7 @@ class MenuState(State):
         
         # Draw Title with a offset dark green/teal shadow glow effect
         glow_surf = self.game.assets.title_font.render("SPACE SHOOTERS", True, (0, 100, 80))
-        glow_rect = glow_surf.get_rect(center=(self.game.width // 2 + 2, self.game.height // 3 + 2))
+        glow_rect = glow_surf.get_rect(center=(self.title_rect.centerx + 2, self.title_rect.centery + 2))
         screen.blit(glow_surf, glow_rect)
         screen.blit(self.title_text, self.title_rect)
         
@@ -178,23 +196,34 @@ class MenuState(State):
             option = button["label"]
             rect = button["rect"]
             is_sel = (idx == self.selected_index)
-            is_hovered = self.hovered_index == idx
-            is_pressed = self.click_index == idx and self.click_timer > 0
-            color = (0, 255, 255) if is_sel else (190, 220, 240)
-            if is_hovered or is_sel:
-                color = (120, 255, 255)
+            is_hovered = (self.hovered_index == idx)
+            is_pressed = (self.click_index == idx and self.click_timer > 0)
+            is_danger = (option.lower() == "quit")
 
-            fill = (22, 34, 56, 220)
-            border = (100, 130, 160, 255)
-            if is_hovered:
-                fill = (24, 94, 116, 240)
-                border = (0, 255, 255, 255)
-            if is_sel:
-                fill = (18, 86, 108, 250)
-                border = (0, 255, 255, 255)
-            if is_pressed:
-                fill = (12, 40, 84, 255)
-                border = (180, 255, 255, 255)
+            if is_danger and (is_hovered or is_sel):
+                fill = (65, 15, 25, 245)
+                border = (255, 60, 80, 255)
+                color = (255, 140, 160)
+            elif is_danger:
+                fill = (35, 18, 24, 210)
+                border = (140, 60, 70, 255)
+                color = (220, 170, 180)
+            else:
+                color = (0, 255, 255) if is_sel else (190, 220, 240)
+                if is_hovered or is_sel:
+                    color = (120, 255, 255)
+
+                fill = (22, 34, 56, 220)
+                border = (100, 130, 160, 255)
+                if is_hovered:
+                    fill = (24, 94, 116, 240)
+                    border = (0, 255, 255, 255)
+                if is_sel:
+                    fill = (18, 86, 108, 250)
+                    border = (0, 255, 255, 255)
+                if is_pressed:
+                    fill = (12, 40, 84, 255)
+                    border = (180, 255, 255, 255)
 
             _draw_ui_button(
                 screen,
@@ -207,14 +236,162 @@ class MenuState(State):
                 border=border,
                 text_color=color,
                 pulse=self.anim_timer * 8 + idx,
+                danger=is_danger,
             )
 
-        # Draw controller instruction banner at the bottom
-        controls_text = self.game.assets.hud_font.render(
-            "WASD / Arrows to Move   |   SPACE to Shoot   |   M for Missile   |   ESC to Pause", True, (80, 100, 120)
+
+class InstructionsState(State):
+    """
+    Sprint 9 — Dedicated Game Mechanics & Flight Manual.
+    
+    Provides a comprehensive, elegant breakdown of all 6 core combat systems:
+    Flight, Weapons, Missiles, Shields, Combo Multiplier, and Space Hazards.
+    """
+    def __init__(self, game):
+        super().__init__(game)
+        self.starfield = Starfield(self.game.width, self.game.height, num_stars=90)
+        self.anim_timer = 0.0
+        self.back_rect = pg.Rect(40, 32, 130, 44)
+        self.back_hovered = False
+        
+        self.mechanics = [
+            {
+                "title": "FLIGHT CONTROLS",
+                "tag": "WASD / ARROWS",
+                "color": (0, 230, 255),
+                "desc": "Full omnidirectional vector thrusters with inertial dampening. Boundary barriers keep your fighter securely within combat theater.",
+            },
+            {
+                "title": "PRIMARY PHOTON BLASTER",
+                "tag": "SPACEBAR",
+                "color": (100, 180, 255),
+                "desc": "Rapid concentrated plasma bolts. Upgradeable with Triple Cannons, Faster Reload modules, and heavy piercing laser slugs.",
+            },
+            {
+                "title": "HOMING MISSILES",
+                "tag": "M KEY",
+                "color": (255, 130, 40),
+                "desc": "Lock-on acoustic warheads that seek out the highest-threat enemy on screen, dealing massive area-of-effect explosive damage.",
+            },
+            {
+                "title": "KINETIC SHIELD BARRIER",
+                "tag": "DEFENSE SYSTEM",
+                "color": (0, 255, 200),
+                "desc": "Absorbs 100% of projectile and collision impacts before hull breach. Restored via blue powerup orbs and persistent shop nanites.",
+            },
+            {
+                "title": "COMBO MULTIPLIER",
+                "tag": "SCORE BOOST",
+                "color": (255, 220, 50),
+                "desc": "Chain rapid enemy takedowns before the decay timer expires to ramp up score multipliers up to x3.0. Taking damage breaks the chain.",
+            },
+            {
+                "title": "HAZARDS & MOTHERSHIPS",
+                "tag": "COMBAT THREATS",
+                "color": (255, 70, 90),
+                "desc": "Asteroids fragment into dangerous shards upon impact. Boss motherships feature multiple phases and high-density projectile patterns.",
+            },
+        ]
+        
+        # 2 rows x 3 columns grid
+        card_w, card_h = 360, 195
+        gap_x, gap_y = 35, 25
+        start_x = (self.game.width - (3 * card_w + 2 * gap_x)) // 2
+        start_y = 145
+        
+        self.cards = []
+        for i, item in enumerate(self.mechanics):
+            row = i // 3
+            col = i % 3
+            rect = pg.Rect(start_x + col * (card_w + gap_x), start_y + row * (card_h + gap_y), card_w, card_h)
+            self.cards.append({"rect": rect, "data": item})
+
+    def handle_events(self, events):
+        for event in events:
+            if event.type == pg.MOUSEMOTION:
+                self.back_hovered = self.back_rect.collidepoint(event.pos)
+            elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.back_rect.collidepoint(event.pos):
+                    self.game.change_state(MenuState(self.game))
+                    return
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_ESCAPE, pg.K_RETURN, pg.K_BACKSPACE):
+                    self.game.change_state(MenuState(self.game))
+                    return
+
+    def update(self, dt):
+        self.starfield.update(dt)
+        self.anim_timer += dt
+
+    def draw(self, screen):
+        screen.fill((10, 12, 22))
+        self.starfield.draw(screen)
+
+        # Header
+        title = self.game.assets.title_font.render("FLIGHT MANUAL & MECHANICS", True, (0, 240, 255))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 55)))
+
+        sub = self.game.assets.hud_font.render("Essential starship flight systems, weapons operation, and tactical survival protocols", True, (160, 190, 220))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 100)))
+
+        # Back button
+        _draw_ui_button(
+            screen,
+            self.back_rect,
+            "<- MENU",
+            self.game.assets.font,
+            hovered=self.back_hovered,
+            fill=(25, 36, 54, 220),
+            border=(0, 220, 255, 255) if self.back_hovered else (90, 120, 150, 255),
+            text_color=(200, 230, 255),
+            pulse=self.anim_timer * 8,
         )
-        controls_rect = controls_text.get_rect(center=(self.game.width // 2, self.game.height - 40))
-        screen.blit(controls_text, controls_rect)
+
+        # Draw cards
+        for card_item in self.cards:
+            rect = card_item["rect"]
+            data = card_item["data"]
+            theme_color = data["color"]
+
+            card_surf = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+            card_surf.fill((18, 26, 42, 215))
+            pg.draw.rect(card_surf, (*theme_color, 180), card_surf.get_rect(), 2, border_radius=12)
+            
+            # Subtle top accent bar
+            pg.draw.rect(card_surf, (*theme_color, 240), pg.Rect(0, 0, rect.width, 4), border_top_left_radius=12, border_top_right_radius=12)
+            screen.blit(card_surf, rect)
+
+            # Title
+            title_surf = self.game.assets.font.render(data["title"], True, (255, 255, 255))
+            screen.blit(title_surf, (rect.x + 16, rect.y + 14))
+
+            # Tag badge
+            tag_surf = self.game.assets.hud_font.render(f" {data['tag']} ", True, theme_color)
+            tag_rect = tag_surf.get_rect(topleft=(rect.x + 16, rect.y + 44))
+            bg_tag = pg.Surface((tag_rect.width + 8, tag_rect.height + 4), pg.SRCALPHA)
+            bg_tag.fill((*theme_color, 35))
+            pg.draw.rect(bg_tag, (*theme_color, 120), bg_tag.get_rect(), 1, border_radius=4)
+            screen.blit(bg_tag, (tag_rect.x - 4, tag_rect.y - 2))
+            screen.blit(tag_surf, tag_rect)
+
+            # Multi-line wrapped description
+            words = data["desc"].split()
+            lines = []
+            curr_line = []
+            for w in words:
+                curr_line.append(w)
+                rendered = self.game.assets.hud_font.render(" ".join(curr_line), True, (170, 190, 210))
+                if rendered.get_width() > rect.width - 32:
+                    curr_line.pop()
+                    lines.append(" ".join(curr_line))
+                    curr_line = [w]
+            if curr_line:
+                lines.append(" ".join(curr_line))
+
+            for line_idx, line_str in enumerate(lines):
+                line_surf = self.game.assets.hud_font.render(line_str, True, (170, 190, 210))
+                screen.blit(line_surf, (rect.x + 16, rect.y + 80 + line_idx * 22))
+
 
 
 class LevelSelectState(State):
@@ -371,10 +548,6 @@ class LevelSelectState(State):
             else:
                 status_tag = self.game.assets.font.render("PLAY", True, (0, 240, 255))
                 screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
-
-        hint = self.game.assets.font.render("Hover a tile then click it, or use mouse + Enter on the current hover target", True, (120, 140, 160))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 60))
-        screen.blit(hint, hint_rect)
 
 
 class PlayState(State):
@@ -1086,12 +1259,25 @@ class PauseState(State):
 
         for idx, button in enumerate(self.buttons):
             rect = button["rect"]
-            hovered = self.hovered_index == idx
-            fill = (20, 30, 44, 220)
-            border = (90, 120, 150, 255)
-            if hovered:
-                fill = (24, 88, 105, 240)
-                border = (0, 255, 255, 255)
+            hovered = (self.hovered_index == idx)
+            is_danger = "QUIT" in button["label"]
+
+            if is_danger and hovered:
+                fill = (65, 15, 25, 240)
+                border = (255, 60, 80, 255)
+                text_color = (255, 140, 160)
+            elif is_danger:
+                fill = (35, 18, 24, 210)
+                border = (140, 60, 70, 255)
+                text_color = (220, 170, 180)
+            else:
+                fill = (20, 30, 44, 220)
+                border = (90, 120, 150, 255)
+                text_color = (240, 240, 240)
+                if hovered:
+                    fill = (24, 88, 105, 240)
+                    border = (0, 255, 255, 255)
+
             _draw_ui_button(
                 screen,
                 rect,
@@ -1100,13 +1286,10 @@ class PauseState(State):
                 hovered=hovered,
                 fill=fill,
                 border=border,
-                text_color=(240, 240, 240),
+                text_color=text_color,
                 pulse=self.anim_timer * 10 + idx,
+                danger=is_danger,
             )
-        
-        hint = self.game.assets.font.render("Press ESC to Resume   |   Q to Quit", True, (220, 220, 220))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height // 2 + 120))
-        screen.blit(hint, hint_rect)
 
 
 class GameOverState(State):
@@ -1198,11 +1381,6 @@ class GameOverState(State):
             text_color=(255, 230, 230),
             pulse=self.cursor_timer * 12,
         )
-        
-        # Bottom hint
-        hint = self.game.assets.hud_font.render("Click SAVE SCORE or press ENTER to View Leaderboard", True, (130, 140, 150))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
-        screen.blit(hint, hint_rect)
 
 
 # ---------------------------------------------------------------------------
@@ -1358,57 +1536,63 @@ class BossDefeatedState(State):
 
 
 # ---------------------------------------------------------------------------
-# Sprint 7 — ShopState (between-level upgrade shop)
+# Sprint 7 & 9 — ShopState (between-level upgrade shop)
 # ---------------------------------------------------------------------------
 
 # Full upgrade pool — 3 are randomly picked each time
 _UPGRADE_POOL = [
     {
         "id": "max_health_bonus",
-        "name": "Max Health +20",
-        "desc": "Permanently raises your HP ceiling by 20",
+        "name": "Max Hull HP +20",
+        "desc": "Reinforces armor plating and raises ship hull HP capacity by +20.",
         "cost": 300,
-        "icon": (0, 220, 100),
+        "sprite_alias": "powerup_health",
+        "fallback_color": (0, 220, 100),
         "step": 20,
     },
     {
         "id": "max_shield_bonus",
         "name": "Max Shield +20",
-        "desc": "Permanently raises your shield ceiling by 20",
+        "desc": "Expands forcefield generator capacity by +20 barrier points.",
         "cost": 280,
-        "icon": (0, 180, 255),
+        "sprite_alias": "powerup_shield",
+        "fallback_color": (0, 180, 255),
         "step": 20,
     },
     {
         "id": "extra_lives",
-        "name": "Extra Life",
-        "desc": "Adds 1 spare life for the next level",
+        "name": "Backup Vessel +1",
+        "desc": "Deploys 1 spare starship life reserve for the upcoming sector.",
         "cost": 500,
-        "icon": (255, 200, 0),
+        "sprite_alias": "player",
+        "fallback_color": (255, 200, 0),
         "step": 1,
     },
     {
         "id": "reload_reduction",
-        "name": "Faster Reload",
-        "desc": "Reduces shoot cooldown by 10% (stacks)",
+        "name": "Rapid Blaster Mod",
+        "desc": "Accelerates weapon cooling, reducing firing delay by 10% (stacks).",
         "cost": 350,
-        "icon": (255, 120, 0),
+        "sprite_alias": "powerup_power_laser",
+        "fallback_color": (255, 120, 0),
         "step": 0.10,
     },
     {
         "id": "missile_capacity",
         "name": "Missile Rack +1",
-        "desc": "Start each level with 1 extra missile",
+        "desc": "Stocks +1 heavy lock-on missile in cargo bay for each level.",
         "cost": 250,
-        "icon": (255, 80, 0),
+        "sprite_alias": "powerup_missile",
+        "fallback_color": (255, 80, 0),
         "step": 1,
     },
     {
         "id": "shield_regen_rate",
-        "name": "Shield Regen",
-        "desc": "Slowly regenerates shield points over time",
+        "name": "Nanite Shield Regen",
+        "desc": "Installs automated nanite emitters that steadily repair shields over time.",
         "cost": 400,
-        "icon": (100, 200, 255),
+        "sprite_alias": "powerup_speed",
+        "fallback_color": (100, 200, 255),
         "step": 5.0,
     },
 ]
@@ -1416,12 +1600,10 @@ _UPGRADE_POOL = [
 
 class ShopState(State):
     """
-    Sprint 7 — Between-level upgrade shop.
+    Sprint 7 & 9 — Overhauled Between-level Upgrade Shop.
     
-    Shows 3 randomly selected upgrades from the pool; the player spends
-    accumulated score to buy them.  A "Skip" button is always available.
-    Purchased bonuses are stored in `game.upgrades` and applied the next
-    time PlayState creates the player.
+    Features spacious upgrade cards, authentic sprite icons, card elevation
+    micro-animations, purchase sparkle particle bursts, and tactile feedback.
     """
     NUM_OFFERS = 3
 
@@ -1430,6 +1612,7 @@ class ShopState(State):
         self.score = score
         self.cleared_level = int(cleared_level)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=80)
+        self.particles = pg.sprite.Group()
         self.timer = 0.0
         self.purchased = set()   # indices of already-bought offers
         self.hovered = None
@@ -1439,17 +1622,18 @@ class ShopState(State):
         # Randomly choose 3 distinct upgrades from the pool
         self.offers = random.sample(_UPGRADE_POOL, self.NUM_OFFERS)
 
-        # Build button rects
-        card_w, card_h = 310, 160
-        total_w = self.NUM_OFFERS * card_w + (self.NUM_OFFERS - 1) * 30
+        # Build card geometry: spacious cards with generous padding
+        card_w, card_h = 340, 240
+        gap = 35
+        total_w = self.NUM_OFFERS * card_w + (self.NUM_OFFERS - 1) * gap
         start_x = (self.game.width - total_w) // 2
+        start_y = self.game.height // 2 - card_h // 2 + 10
         self.card_rects = []
         for i in range(self.NUM_OFFERS):
-            x = start_x + i * (card_w + 30)
-            y = self.game.height // 2 - card_h // 2 + 20
-            self.card_rects.append(pg.Rect(x, y, card_w, card_h))
+            x = start_x + i * (card_w + gap)
+            self.card_rects.append(pg.Rect(x, start_y, card_w, card_h))
 
-        self.skip_rect = pg.Rect(self.game.width // 2 - 110, self.game.height - 110, 220, 52)
+        self.skip_rect = pg.Rect(self.game.width // 2 - 120, self.game.height - 95, 240, 52)
 
     def _proceed(self):
         if self.transition_locked:
@@ -1479,7 +1663,7 @@ class ShopState(State):
                         self._buy(i)
                         return
             elif event.type == pg.KEYDOWN:
-                if event.key == pg.K_ESCAPE:
+                if event.key in (pg.K_ESCAPE, pg.K_SPACE):
                     self._proceed()
 
     def _buy(self, idx):
@@ -1488,101 +1672,145 @@ class ShopState(State):
             return  # not enough score
         self.score -= offer["cost"]
         self.purchased.add(idx)
+        
         # Accumulate bonus in game.upgrades
         uid = offer["id"]
         if uid not in self.game.upgrades:
             self.game.upgrades[uid] = 0.0 if isinstance(offer["step"], float) else 0
         self.game.upgrades[uid] = self.game.upgrades.get(uid, 0) + offer["step"]
 
+        # Purchase audio & particle juice
+        if hasattr(self.game, "assets") and hasattr(self.game.assets, "get_sound"):
+            self.game.assets.get_sound("powerup").play()
+        rect = self.card_rects[idx]
+        spawn_sparks(self.particles, rect.centerx, rect.centery, (0, -40), color=(100, 255, 200), count=25)
+
     def update(self, dt):
         self.starfield.update(dt)
+        self.particles.update(dt)
         self.timer += dt
 
     def draw(self, screen):
         screen.fill((8, 10, 24))
         self.starfield.draw(screen)
+        self.particles.draw(screen)
 
         # Header
         title = self.game.assets.title_font.render("UPGRADE SHOP", True, (255, 210, 0))
-        screen.blit(title, title.get_rect(center=(self.game.width // 2, 90)))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 75)))
 
         sub = self.game.assets.font.render(
-            f"Level {self.cleared_level} cleared!  Score: {self.score}   — Spend wisely, pilot",
-            True, (180, 200, 220)
+            f"Level {self.cleared_level} Cleared   •   Available Budget: {self.score} PTS",
+            True, (190, 220, 250)
         )
-        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 145)))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 125)))
 
-        for i, (offer, rect) in enumerate(zip(self.offers, self.card_rects)):
+        for i, (offer, base_rect) in enumerate(zip(self.offers, self.card_rects)):
             bought = i in self.purchased
-            hovered = self.hovered == i
-            can_afford = self.score >= offer["cost"]
+            hovered = (self.hovered == i)
+            can_afford = (self.score >= offer["cost"])
 
-            # Card background
+            # Hover micro-animation: smooth lift offset
+            rect = base_rect.copy()
+            if hovered and not bought:
+                rect.move_ip(0, -4)
+
+            # Card background colors
             if bought:
-                fill = (20, 70, 30)
-                border = (80, 220, 100)
+                fill = (18, 55, 30)
+                border = (80, 220, 110)
             elif not can_afford:
-                fill = (30, 30, 40)
-                border = (80, 80, 90)
+                fill = (24, 25, 35)
+                border = (60, 65, 80)
             elif hovered:
-                fill = (30, 60, 90)
-                border = (0, 220, 255)
+                fill = (25, 52, 85)
+                border = (0, 240, 255)
             else:
-                fill = (20, 35, 55)
-                border = (80, 130, 180)
+                fill = (18, 30, 50)
+                border = (70, 110, 160)
 
             card = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
             card.fill((0, 0, 0, 0))
-            pg.draw.rect(card, (*fill, 220), card.get_rect(), border_radius=14)
+            pg.draw.rect(card, (*fill, 230), card.get_rect(), border_radius=14)
             pg.draw.rect(card, (*border, 255), card.get_rect(), 2, border_radius=14)
+            
             if hovered and not bought and can_afford:
-                # Subtle inner glow
+                # Glowing neon inner aura
                 glow = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
-                pg.draw.rect(glow, (0, 200, 255, 18), glow.get_rect(), border_radius=14)
+                pg.draw.rect(glow, (0, 230, 255, 22), glow.get_rect(), border_radius=14)
                 card.blit(glow, (0, 0))
             screen.blit(card, rect)
 
-            # Icon circle
-            icon_x, icon_y = rect.x + 30, rect.y + 35
-            pg.draw.circle(screen, offer["icon"], (icon_x, icon_y), 18)
-            pg.draw.circle(screen, (255, 255, 255), (icon_x, icon_y), 18, 2)
+            # Icon: Genuine Sprite Icon with procedural fallback
+            sprite_alias = offer.get("sprite_alias", "")
+            icon_img = None
+            if hasattr(self.game, "assets"):
+                icon_img = self.game.assets.get_image(sprite_alias)
+            
+            icon_center = (rect.x + 40, rect.y + 38)
+            # Glowing backing circle for icon
+            pg.draw.circle(screen, (*fill[:3], 255), icon_center, 22)
+            pg.draw.circle(screen, border, icon_center, 22, 2)
 
-            # Name
-            name_surf = self.game.assets.font.render(offer["name"], True,
-                (200, 220, 200) if bought else (255, 255, 255) if can_afford else (120, 120, 130))
-            screen.blit(name_surf, (rect.x + 58, rect.y + 24))
-
-            # Description
-            desc_surf = self.game.assets.hud_font.render(offer["desc"], True, (160, 180, 200))
-            screen.blit(desc_surf, (rect.x + 15, rect.y + 68))
-
-            # Cost / Bought label
-            if bought:
-                label = self.game.assets.font.render("✓ PURCHASED", True, (100, 255, 130))
+            if icon_img:
+                scaled_icon = pg.transform.smoothscale(icon_img, (32, 32))
+                icon_rect = scaled_icon.get_rect(center=icon_center)
+                screen.blit(scaled_icon, icon_rect)
             else:
-                cost_color = (255, 200, 50) if can_afford else (180, 80, 80)
-                label = self.game.assets.font.render(f"Cost: {offer['cost']} pts", True, cost_color)
-            screen.blit(label, (rect.x + 15, rect.y + 110))
+                fallback_color = offer.get("fallback_color", (0, 200, 255))
+                pg.draw.circle(screen, fallback_color, icon_center, 12)
 
-            # Hover buy hint
-            if hovered and not bought and can_afford:
-                hint = self.game.assets.hud_font.render("Click to buy", True, (0, 230, 255))
-                screen.blit(hint, (rect.x + 15, rect.y + 135))
+            # Upgrade Title
+            name_color = (200, 255, 210) if bought else ((255, 255, 255) if can_afford else (120, 125, 140))
+            name_surf = self.game.assets.font.render(offer["name"], True, name_color)
+            screen.blit(name_surf, (rect.x + 72, rect.y + 26))
+
+            # Description (word-wrapped across multiple lines so nothing clips)
+            words = offer["desc"].split()
+            desc_lines = []
+            curr_line = []
+            for w in words:
+                curr_line.append(w)
+                t_surf = self.game.assets.hud_font.render(" ".join(curr_line), True, (160, 185, 210))
+                if t_surf.get_width() > rect.width - 36:
+                    curr_line.pop()
+                    desc_lines.append(" ".join(curr_line))
+                    curr_line = [w]
+            if curr_line:
+                desc_lines.append(" ".join(curr_line))
+
+            for line_idx, line_text in enumerate(desc_lines):
+                d_surf = self.game.assets.hud_font.render(
+                    line_text, True, (150, 175, 200) if not bought else (130, 180, 150)
+                )
+                screen.blit(d_surf, (rect.x + 18, rect.y + 78 + line_idx * 22))
+
+            # Bottom Action/Status Bar
+            if bought:
+                badge = self.game.assets.font.render("✓ PURCHASED", True, (100, 255, 140))
+                screen.blit(badge, (rect.x + 18, rect.y + rect.height - 44))
+            elif can_afford:
+                cost_surf = self.game.assets.font.render(f"Cost: {offer['cost']} PTS", True, (255, 210, 50))
+                screen.blit(cost_surf, (rect.x + 18, rect.y + rect.height - 44))
+                if hovered:
+                    buy_hint = self.game.assets.hud_font.render("⚡ Click to Install", True, (0, 240, 255))
+                    screen.blit(buy_hint, (rect.x + rect.width - buy_hint.get_width() - 18, rect.y + rect.height - 40))
+            else:
+                cost_surf = self.game.assets.font.render(f"Cost: {offer['cost']} PTS", True, (200, 80, 80))
+                screen.blit(cost_surf, (rect.x + 18, rect.y + rect.height - 44))
+                lock_tag = self.game.assets.hud_font.render("🔒 Need Budget", True, (160, 80, 80))
+                screen.blit(lock_tag, (rect.x + rect.width - lock_tag.get_width() - 18, rect.y + rect.height - 40))
 
         # Skip button
         _draw_ui_button(
-            screen, self.skip_rect, "SKIP →",
+            screen, self.skip_rect, "CONTINUE →",
             self.game.assets.font,
             hovered=self.skip_hovered,
             fill=(30, 40, 58, 220),
             border=(180, 180, 200, 255) if self.skip_hovered else (100, 110, 140, 255),
-            text_color=(200, 210, 230),
+            text_color=(210, 225, 245),
             pulse=self.timer * 8,
         )
-
-        hint = self.game.assets.hud_font.render("You can buy multiple upgrades if you can afford them  |  ESC or SKIP to continue",
-                                                 True, (80, 100, 120))
-        screen.blit(hint, hint.get_rect(center=(self.game.width // 2, self.game.height - 60)))
 
 
 class LevelCompleteState(State):
@@ -1712,10 +1940,6 @@ class GameCompleteState(State):
             pulse=self.timer * 8,
         )
 
-        hint = self.game.assets.font.render("Click VIEW LEADERBOARD or press ENTER", True, (100, 130, 150))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 100))
-        screen.blit(hint, hint_rect)
-
 
 class HighScoresState(State):
     """State representing the Top-10 Leaderboard listing loaded from SaveSystem."""
@@ -1782,8 +2006,3 @@ class HighScoresState(State):
             screen.blit(rank_surf,  (self.game.width // 2 - 180, y_pos))
             screen.blit(name_surf,  (self.game.width // 2 -  80, y_pos))
             screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
-            
-        # Return instructions
-        hint = self.game.assets.font.render("Hover the MENU button, then click it, or press ESC", True, (100, 120, 140))
-        hint_rect = hint.get_rect(center=(self.game.width // 2, self.game.height - 80))
-        screen.blit(hint, hint_rect)
