@@ -874,7 +874,7 @@ class PlayState(State):
 
         # Damage flash overlay for hits
         if self.damage_flash > 0:
-            flash_alpha = int((self.damage_flash / 0.25) * 120)
+            flash_alpha = min(255, max(0, int((self.damage_flash / 0.25) * 120)))
             flash = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
             flash.fill((255, 30, 30, flash_alpha))
             self.canvas.blit(flash, (0, 0))
