@@ -251,7 +251,7 @@ class InstructionsState(State):
         super().__init__(game)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=90)
         self.anim_timer = 0.0
-        self.back_rect = pg.Rect(40, 32, 130, 44)
+        self.back_rect = pg.Rect(40, 30, 130, 44)
         self.back_hovered = False
         
         self.mechanics = [
@@ -293,11 +293,11 @@ class InstructionsState(State):
             },
         ]
         
-        # 2 rows x 3 columns grid
-        card_w, card_h = 360, 195
-        gap_x, gap_y = 35, 25
+        # 2 rows x 3 columns grid with spacious card dimensions
+        card_w, card_h = 380, 245
+        gap_x, gap_y = 30, 20
         start_x = (self.game.width - (3 * card_w + 2 * gap_x)) // 2
-        start_y = 145
+        start_y = 135
         
         self.cards = []
         for i, item in enumerate(self.mechanics):
@@ -329,10 +329,10 @@ class InstructionsState(State):
 
         # Header
         title = self.game.assets.title_font.render("FLIGHT MANUAL & MECHANICS", True, (0, 240, 255))
-        screen.blit(title, title.get_rect(center=(self.game.width // 2, 55)))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 50)))
 
         sub = self.game.assets.hud_font.render("Essential starship flight systems, weapons operation, and tactical survival protocols", True, (160, 190, 220))
-        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 100)))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 92)))
 
         # Back button
         _draw_ui_button(
@@ -357,7 +357,7 @@ class InstructionsState(State):
             card_surf.fill((18, 26, 42, 215))
             pg.draw.rect(card_surf, (*theme_color, 180), card_surf.get_rect(), 2, border_radius=12)
             
-            # Subtle top accent bar
+            # Top accent bar
             pg.draw.rect(card_surf, (*theme_color, 240), pg.Rect(0, 0, rect.width, 4), border_top_left_radius=12, border_top_right_radius=12)
             screen.blit(card_surf, rect)
 
@@ -367,12 +367,15 @@ class InstructionsState(State):
 
             # Tag badge
             tag_surf = self.game.assets.hud_font.render(f" {data['tag']} ", True, theme_color)
-            tag_rect = tag_surf.get_rect(topleft=(rect.x + 16, rect.y + 44))
+            tag_rect = tag_surf.get_rect(topleft=(rect.x + 16, rect.y + 46))
             bg_tag = pg.Surface((tag_rect.width + 8, tag_rect.height + 4), pg.SRCALPHA)
             bg_tag.fill((*theme_color, 35))
             pg.draw.rect(bg_tag, (*theme_color, 120), bg_tag.get_rect(), 1, border_radius=4)
             screen.blit(bg_tag, (tag_rect.x - 4, tag_rect.y - 2))
             screen.blit(tag_surf, tag_rect)
+
+            # Divider line
+            pg.draw.line(screen, (*theme_color, 70), (rect.x + 16, rect.y + 78), (rect.x + rect.width - 16, rect.y + 78), 1)
 
             # Multi-line wrapped description
             words = data["desc"].split()
@@ -390,7 +393,7 @@ class InstructionsState(State):
 
             for line_idx, line_str in enumerate(lines):
                 line_surf = self.game.assets.hud_font.render(line_str, True, (170, 190, 210))
-                screen.blit(line_surf, (rect.x + 16, rect.y + 80 + line_idx * 22))
+                screen.blit(line_surf, (rect.x + 16, rect.y + 90 + line_idx * 22))
 
 
 
@@ -1602,8 +1605,8 @@ class ShopState(State):
     """
     Sprint 7 & 9 — Overhauled Between-level Upgrade Shop.
     
-    Features spacious upgrade cards, authentic sprite icons, card elevation
-    micro-animations, purchase sparkle particle bursts, and tactile feedback.
+    Features spacious upgrade cards, isolated bottom action buttons, authentic
+    sprite icons, hover animations, purchase particle bursts, and tactile feedback.
     """
     NUM_OFFERS = 3
 
@@ -1622,18 +1625,18 @@ class ShopState(State):
         # Randomly choose 3 distinct upgrades from the pool
         self.offers = random.sample(_UPGRADE_POOL, self.NUM_OFFERS)
 
-        # Build card geometry: spacious cards with generous padding
-        card_w, card_h = 340, 240
+        # Build card geometry: spacious 360x290 cards with generous padding
+        card_w, card_h = 360, 290
         gap = 35
         total_w = self.NUM_OFFERS * card_w + (self.NUM_OFFERS - 1) * gap
         start_x = (self.game.width - total_w) // 2
-        start_y = self.game.height // 2 - card_h // 2 + 10
+        start_y = 155
         self.card_rects = []
         for i in range(self.NUM_OFFERS):
             x = start_x + i * (card_w + gap)
             self.card_rects.append(pg.Rect(x, start_y, card_w, card_h))
 
-        self.skip_rect = pg.Rect(self.game.width // 2 - 120, self.game.height - 95, 240, 52)
+        self.skip_rect = pg.Rect(self.game.width // 2 - 130, 590, 260, 52)
 
     def _proceed(self):
         if self.transition_locked:
@@ -1697,13 +1700,13 @@ class ShopState(State):
 
         # Header
         title = self.game.assets.title_font.render("UPGRADE SHOP", True, (255, 210, 0))
-        screen.blit(title, title.get_rect(center=(self.game.width // 2, 75)))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 58)))
 
         sub = self.game.assets.font.render(
             f"Level {self.cleared_level} Cleared   •   Available Budget: {self.score} PTS",
             True, (190, 220, 250)
         )
-        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 125)))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 105)))
 
         for i, (offer, base_rect) in enumerate(zip(self.offers, self.card_rects)):
             bought = i in self.purchased
@@ -1747,7 +1750,7 @@ class ShopState(State):
             if hasattr(self.game, "assets"):
                 icon_img = self.game.assets.get_image(sprite_alias)
             
-            icon_center = (rect.x + 40, rect.y + 38)
+            icon_center = (rect.x + 38, rect.y + 36)
             # Glowing backing circle for icon
             pg.draw.circle(screen, (*fill[:3], 255), icon_center, 22)
             pg.draw.circle(screen, border, icon_center, 22, 2)
@@ -1763,9 +1766,12 @@ class ShopState(State):
             # Upgrade Title
             name_color = (200, 255, 210) if bought else ((255, 255, 255) if can_afford else (120, 125, 140))
             name_surf = self.game.assets.font.render(offer["name"], True, name_color)
-            screen.blit(name_surf, (rect.x + 72, rect.y + 26))
+            screen.blit(name_surf, (rect.x + 68, rect.y + 24))
 
-            # Description (word-wrapped across multiple lines so nothing clips)
+            # Divider line separating header from description
+            pg.draw.line(screen, (*border[:3], 80), (rect.x + 16, rect.y + 66), (rect.x + rect.width - 16, rect.y + 66), 1)
+
+            # Description (word-wrapped cleanly across lines)
             words = offer["desc"].split()
             desc_lines = []
             curr_line = []
@@ -1783,25 +1789,38 @@ class ShopState(State):
                 d_surf = self.game.assets.hud_font.render(
                     line_text, True, (150, 175, 200) if not bought else (130, 180, 150)
                 )
-                screen.blit(d_surf, (rect.x + 18, rect.y + 78 + line_idx * 22))
+                screen.blit(d_surf, (rect.x + 18, rect.y + 80 + line_idx * 22))
 
-            # Bottom Action/Status Bar
+            # Isolated Bottom Action / Status Button Container
+            btn_rect = pg.Rect(rect.x + 16, rect.y + rect.height - 62, rect.width - 32, 46)
+            btn_panel = pg.Surface((btn_rect.width, btn_rect.height), pg.SRCALPHA)
+            btn_panel.fill((0, 0, 0, 0))
+
             if bought:
-                badge = self.game.assets.font.render("✓ PURCHASED", True, (100, 255, 140))
-                screen.blit(badge, (rect.x + 18, rect.y + rect.height - 44))
+                btn_panel.fill((20, 70, 35, 230))
+                pg.draw.rect(btn_panel, (80, 220, 110, 255), btn_panel.get_rect(), 2, border_radius=8)
+                txt = self.game.assets.font.render("✓ INSTALLED", True, (120, 255, 160))
+                btn_panel.blit(txt, txt.get_rect(center=(btn_rect.width // 2, btn_rect.height // 2)))
             elif can_afford:
-                cost_surf = self.game.assets.font.render(f"Cost: {offer['cost']} PTS", True, (255, 210, 50))
-                screen.blit(cost_surf, (rect.x + 18, rect.y + rect.height - 44))
                 if hovered:
-                    buy_hint = self.game.assets.hud_font.render("⚡ Click to Install", True, (0, 240, 255))
-                    screen.blit(buy_hint, (rect.x + rect.width - buy_hint.get_width() - 18, rect.y + rect.height - 40))
+                    btn_panel.fill((0, 170, 220, 240))
+                    pg.draw.rect(btn_panel, (200, 255, 255, 255), btn_panel.get_rect(), 2, border_radius=8)
+                    txt = self.game.assets.font.render(f"⚡ BUY ({offer['cost']} PTS)", True, (10, 25, 40))
+                    btn_panel.blit(txt, txt.get_rect(center=(btn_rect.width // 2, btn_rect.height // 2)))
+                else:
+                    btn_panel.fill((22, 45, 75, 220))
+                    pg.draw.rect(btn_panel, (0, 220, 255, 200), btn_panel.get_rect(), 2, border_radius=8)
+                    txt = self.game.assets.font.render(f"⚡ COST: {offer['cost']} PTS", True, (255, 215, 60))
+                    btn_panel.blit(txt, txt.get_rect(center=(btn_rect.width // 2, btn_rect.height // 2)))
             else:
-                cost_surf = self.game.assets.font.render(f"Cost: {offer['cost']} PTS", True, (200, 80, 80))
-                screen.blit(cost_surf, (rect.x + 18, rect.y + rect.height - 44))
-                lock_tag = self.game.assets.hud_font.render("🔒 Need Budget", True, (160, 80, 80))
-                screen.blit(lock_tag, (rect.x + rect.width - lock_tag.get_width() - 18, rect.y + rect.height - 40))
+                btn_panel.fill((30, 20, 28, 200))
+                pg.draw.rect(btn_panel, (120, 60, 70, 180), btn_panel.get_rect(), 1, border_radius=8)
+                txt = self.game.assets.font.render(f"🔒 {offer['cost']} PTS (LOCKED)", True, (200, 110, 120))
+                btn_panel.blit(txt, txt.get_rect(center=(btn_rect.width // 2, btn_rect.height // 2)))
 
-        # Skip button
+            screen.blit(btn_panel, btn_rect)
+
+        # Skip / Continue button
         _draw_ui_button(
             screen, self.skip_rect, "CONTINUE →",
             self.game.assets.font,
