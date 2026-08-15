@@ -517,17 +517,77 @@ Comprehensive interactive catalog documenting:
 
 ---
 
+## Sprint 9 — 🚀 PLANNED: UI/UX Overhaul & Visual Polish
+
+Revamp the user interface, interaction design, and visual aesthetics across all menus and states to deliver a sleek, modern, and cohesive arcade experience.
+
+### 1. De-Cluttering & Dedicated Game Mechanics Guide
+
+#### 🧹 De-Clutter Existing Screens
+- Strip out repetitive, intrusive guidance text and instruction footers from [`states.py`](file:///d:/projects/learning_pygame/src/states.py) across `MenuState`, `LevelSelectState`, `ShopState`, `PauseState`, `GameOverState`, and `LevelCompleteState`.
+- Maintain clean, cinematic screen compositions focused purely on relevant options and stats.
+
+#### 📖 Dedicated Game Mechanics Manual — [states.py](file:///d:/projects/learning_pygame/src/states.py) (`InstructionsState`)
+- Add a dedicated **"How to Play / Flight Manual"** state accessible directly from the Main Menu (`MenuState`).
+- Keep content strictly focused on **Game Mechanics** (no fluff or boilerplate):
+  - **Flight & Navigation**: Vector movement, boundary management, ship handling.
+  - **Primary & Secondary Weapons**: Rapid Photon Lasers (`SPACE`) and lock-on Homing Missiles (`M`).
+  - **Defensive Systems**: Energy shield barrier absorption, damage flash, and regenerative mechanics.
+  - **Power-Up Field Collectibles**: Triple Cannons, Plasma Overcharge, Thruster Boosters, Health Repair, and Shield Restores.
+  - **Combo Multiplier System**: Kill chaining, decay timer window, and score scaling.
+  - **Space Hazards & Boss Encounters**: Asteroid fragment physics, Boss phase shifts, and tactical weak points.
+- Interactive tabbed / card layout with intuitive keyboard/mouse navigation and back button.
+
+---
+
+### 2. Upgrade Shop Overhaul & Micro-Animations
+
+#### 🛍️ Enhanced Shop Layout & Typography — [states.py](file:///d:/projects/learning_pygame/src/states.py) (`ShopState`)
+- **Card Spacing & Dimensions**: Expand card dimensions and padding with multi-line text wrapping so all upgrade names, stats, and descriptions fit comfortably with zero truncation or text crowding.
+- **Genuine High-Res Sprite Icons**: Replace flat geometric placeholder circles with authentic indexed sprites from `assets/powerups_pickups/`, `assets/weapons_projectiles/`, and `assets/ui_hud/life_counters/` via `AssetsLoader`.
+- **Dynamic Juice & Micro-Animations**:
+  - **Card Hover Elevation & Pulse**: Smooth easing and glowing neon borders that respond dynamically to mouse hover.
+  - **Purchase FX**: Sparkle particle bursts (`spawn_sparks`), purchase chime SFX, and clean checkmark overlays upon unlocking an upgrade.
+  - **Affordability Visuals**: Interactive price tags displaying green/gold when affordable and muted red with lock badges when score is insufficient.
+
+---
+
+### 3. Destructive Action Highlighting (Red Hover on Quit Buttons)
+
+#### 🔴 Semantic Button Styling — [states.py](file:///d:/projects/learning_pygame/src/states.py)
+- Extend `_draw_ui_button()` and menu definitions to support danger/destructive button styles.
+- **Quit / Exit Buttons**: In `MenuState`, `PauseState`, `GameOverState`, and `GameCompleteState`, hovering or selecting the "Quit" button renders a vibrant ruby red glow (`fill=(65, 15, 25)`, `border=(255, 60, 80)`, `text=(255, 130, 150)`) instead of standard cyan/blue.
+- Provides immediate, unmistakable visual feedback distinguishing destructive actions from progression actions.
+
+---
+
+### 4. Advanced UI/UX Components & Visual Hierarchy
+
+#### 🎨 Component System & Aesthetics
+- **Standardized Color Grammar**:
+  - **Cyan / Neon Blue**: Navigation & neutral interactive buttons (`Play`, `Select`, `Leaderboard`).
+  - **Emerald Green**: Confirmations, purchase completions, and level progression (`Continue`, `Start`).
+  - **Amber / Gold**: Currency, score multipliers, and high score ranks.
+  - **Ruby Red**: Destructive actions (`Quit`, `Restart Level`, low health alerts).
+- **Interactive Particle Touches**: Subtle cursor trails and starfield depth layers in all menu backgrounds.
+- **Screen Transitions**: Smooth alpha-fade state transitions avoiding abrupt cuts between states.
+
+---
+
 ## Verification Plan
 
-### Automated Tests ✅
-- `test_sprint6.py` — Level system spawn queue, Asteroid types/sizes/colors, and LevelCompleteState UI verification.
-- `assets_loader.py` — Verified all 28 semantic aliases, direct theme paths, procedural fallbacks, and font/sound indexing.
-- 100% of the 318 assets indexed without missing files or key collisions.
+### Automated Tests
+- `test_sprint9_ui.py` — Unit tests verifying:
+  - `InstructionsState` creation, event handling, and key transitions.
+  - `ShopState` card rendering, sprite icon loading, and purchase transaction calculations.
+  - `_draw_ui_button` danger/quit button color variations and hover states.
+  - Clean state transitions without regressions.
 
-### Manual Verification ✅
-- [done] Organized all 318 assets into 12 vibe categories.
-- [done] Verified image loading for player fleet, enemies, lasers, asteroids, powerups, and environments.
-- [done] Verified custom TTF font loading with SysFont fallback.
-- [done] Verified sound indexation and dummy sound fallback.
-- [done] Confirmed all unit tests pass with 0 errors.
+### Manual Verification
+- [ ] Verify clean, uncluttered layouts in Menu, Level Select, Shop, and Pause states.
+- [ ] Navigate to the new Mechanics Manual from Main Menu and verify all 6 mechanic sections render clearly.
+- [ ] Open Shop after clearing a level: confirm proper card spacing, high-res upgrade sprite icons, hover animations, and purchase sparkle effects.
+- [ ] Hover over "Quit" in Main Menu and Pause Menu: confirm vibrant ruby red highlight.
+- [ ] Run full test suite with zero errors.
+
 
