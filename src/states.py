@@ -543,13 +543,13 @@ class LevelSelectState(State):
             screen.blit(label, label.get_rect(center=rect.center))
 
             if completed:
-                done_tag = self.game.assets.font.render("CLEARED", True, (200, 255, 210))
+                done_tag = self.game.assets.hud_font.render("CLEARED", True, (200, 255, 210))
                 screen.blit(done_tag, done_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
             elif not unlocked:
-                lock_tag = self.game.assets.font.render("LOCKED", True, (190, 190, 200))
+                lock_tag = self.game.assets.hud_font.render("LOCKED", True, (190, 190, 200))
                 screen.blit(lock_tag, lock_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
             else:
-                status_tag = self.game.assets.font.render("PLAY", True, (0, 240, 255))
+                status_tag = self.game.assets.hud_font.render("PLAY", True, (0, 240, 255))
                 screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
 
 
@@ -802,7 +802,7 @@ class PlayState(State):
         """Renders floating battle feedback text for rewards and damage."""
         for item in self.float_texts:
             alpha = max(0, int((item["life"] / item["max_life"]) * 255))
-            text = self.game.assets.font.render(item["text"], True, (*item["color"], alpha))
+            text = self.game.assets.hud_font.render(item["text"], True, (*item["color"], alpha))
             # pygame color tuples with alpha aren't supported by render; this uses a temporary surface.
             text.set_alpha(alpha)
             rect = text.get_rect(center=(int(item["x"]), int(item["y"])))
@@ -1087,7 +1087,7 @@ class PlayState(State):
     def _draw_hud(self):
         """Renders information layout on screen (Score, Level/Wave, Health/Shield Meters, Powerup Timers)."""
         # 1. SCORE
-        score_surf = self.game.assets.font.render(f"SCORE: {self.score}", True, (255, 255, 255))
+        score_surf = self.game.assets.hud_font.render(f"SCORE: {self.score}", True, (255, 255, 255))
         self.canvas.blit(score_surf, (25, 20))
 
         # Sprint 7: Combo counter (shown below score when active)
@@ -1095,7 +1095,7 @@ class PlayState(State):
             combo_alpha = min(255, int(self.combo_timer / self.COMBO_WINDOW * 255))
             mx = self.combo_multiplier
             combo_color = (255, int(230 - (mx - 1) * 25), max(0, int(100 - (mx - 1) * 15)))
-            combo_surf = self.game.assets.font.render(f"COMBO  ×{mx:.1f}  [{self.combo_count} KILLS]", True, combo_color)
+            combo_surf = self.game.assets.hud_font.render(f"COMBO  ×{mx:.1f}  [{self.combo_count} KILLS]", True, combo_color)
             combo_surf.set_alpha(combo_alpha)
             self.canvas.blit(combo_surf, (25, 42))
         
@@ -1106,7 +1106,7 @@ class PlayState(State):
         else:
             wave_txt = f"LVL {self.level_sys.level_number}  WAVE {self.level_sys.wave_number}"
             wave_color = (0, 255, 200)
-        wave_surf = self.game.assets.font.render(wave_txt, True, wave_color)
+        wave_surf = self.game.assets.hud_font.render(wave_txt, True, wave_color)
         self.canvas.blit(wave_surf, (self.game.width - wave_surf.get_width() - 25, 20))
         
         # 3. HEALTH & SHIELD PROGRESS BARS (Center Dashboard)
@@ -1449,7 +1449,7 @@ class BossWarningState(State):
         scaled = pg.transform.smoothscale(text_surf, (w, h))
         screen.blit(scaled, scaled.get_rect(center=(self.game.width // 2, self.game.height // 2 - 40)))
 
-        sub_surf = self.game.assets.font.render("Brace yourself, pilot!", True, (255, 200, 200))
+        sub_surf = self.game.assets.hud_font.render("Brace yourself, pilot!", True, (255, 200, 200))
         screen.blit(sub_surf, sub_surf.get_rect(center=(self.game.width // 2, self.game.height // 2 + 40)))
 
         # Countdown bar
@@ -1534,7 +1534,7 @@ class BossDefeatedState(State):
         scaled = pg.transform.smoothscale(text_surf, (max(1, w), max(1, h)))
         screen.blit(scaled, scaled.get_rect(center=(self.game.width // 2, self.game.height // 2 - 30)))
 
-        sub = self.game.assets.font.render("Excellent work, pilot!", True, (200, 255, 200))
+        sub = self.game.assets.hud_font.render("Excellent work, pilot!", True, (200, 255, 200))
         screen.blit(sub, sub.get_rect(center=(self.game.width // 2, self.game.height // 2 + 50)))
 
 
@@ -1702,7 +1702,7 @@ class ShopState(State):
         title = self.game.assets.title_font.render("UPGRADE SHOP", True, (255, 210, 0))
         screen.blit(title, title.get_rect(center=(self.game.width // 2, 58)))
 
-        sub = self.game.assets.font.render(
+        sub = self.game.assets.hud_font.render(
             f"Level {self.cleared_level} Cleared   •   Available Budget: {self.score} PTS",
             True, (190, 220, 250)
         )
@@ -1872,7 +1872,7 @@ class LevelCompleteState(State):
         title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 4))
         screen.blit(title, title_rect)
 
-        level_text = self.game.assets.font.render(f"LEVEL {self.cleared_level} CLEARED", True, (255, 210, 110))
+        level_text = self.game.assets.hud_font.render(f"LEVEL {self.cleared_level} CLEARED", True, (255, 210, 110))
         level_rect = level_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 20))
         screen.blit(level_text, level_rect)
 
@@ -1939,7 +1939,7 @@ class GameCompleteState(State):
         title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 4))
         screen.blit(title, title_rect)
 
-        sub = self.game.assets.font.render("You have defeated all 10 levels!", True, (0, 255, 200))
+        sub = self.game.assets.hud_font.render("You have defeated all 10 levels!", True, (0, 255, 200))
         sub_rect = sub.get_rect(center=(self.game.width // 2, self.game.height // 4 + 60))
         screen.blit(sub, sub_rect)
 

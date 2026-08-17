@@ -20,6 +20,7 @@ class AssetsLoader:
         self.font = None
         self.title_font = None
         self.hud_font = None
+        self.font_sources = {"title": None, "ui": None, "hud": None}
         
         # Calculate base directory paths
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,24 +73,27 @@ class AssetsLoader:
             "zap": "audio/sfx/alien_emp_zap",
         }
         
-        # Initialize fonts with custom TTF fonts if present, falling back to SysFont
+        # Sprint 10: load each TTF independently so titles, UI, and HUD have distinct roles.
         pg.font.init()
-        font_path = os.path.join(self.fonts_dir, "vector_future_bold.ttf")
-        alt_font_path = os.path.join(self.fonts_dir, "audiowide_cyber_display.ttf")
-        
-        chosen_font = font_path if os.path.exists(font_path) else (alt_font_path if os.path.exists(alt_font_path) else None)
-        if chosen_font:
+        self.title_font, self.font_sources["title"] = self._load_role_font(
+            "audiowide_cyber_display.ttf", size=42, fallback_size=48
+        )
+        self.font, self.font_sources["ui"] = self._load_role_font(
+            "vector_future_bold.ttf", size=22, fallback_size=24
+        )
+        self.hud_font, self.font_sources["hud"] = self._load_role_font(
+            "vector_future_thin.ttf", size=18, fallback_size=20
+        )
+
+    def _load_role_font(self, filename, size, fallback_size):
+        """Load one TTF for a typography role; fall back to Trebuchet MS only for that role."""
+        path = os.path.join(self.fonts_dir, filename)
+        if os.path.exists(path):
             try:
-                self.font = pg.font.Font(chosen_font, 22)
-                self.title_font = pg.font.Font(chosen_font, 46)
-                self.hud_font = pg.font.Font(chosen_font, 18)
+                return pg.font.Font(path, size), os.path.basename(path)
             except Exception:
-                chosen_font = None
-                
-        if chosen_font is None:
-            self.font = pg.font.SysFont("Trebuchet MS", 24)
-            self.title_font = pg.font.SysFont("Trebuchet MS", 48)
-            self.hud_font = pg.font.SysFont("Trebuchet MS", 20)
+                pass
+        return pg.font.SysFont("Trebuchet MS", fallback_size), None
 
     def _build_asset_indexes(self):
         """Scans the assets directory tree and indexes files for fast O(1) resolution."""

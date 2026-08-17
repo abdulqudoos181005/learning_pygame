@@ -574,14 +574,9 @@ Revamped the user interface, interaction design, and visual aesthetics across al
 
 ---
 
-## Sprint 10 — Typography Overhaul (Custom Fonts)
+## Sprint 10 — ✅ COMPLETE: Typography Overhaul (Custom Fonts)
 
-Replace the current one-typeface-for-everything look with a clear font hierarchy using the three TTFs already in [`assets/fonts/`](file:///d:/projects/learning_pygame/assets/fonts). Titles, HUD, and body UI should each have a distinct role so the game reads as a finished arcade product.
-
-### Current problem
-- [`assets_loader.py`](file:///d:/projects/learning_pygame/src/assets_loader.py) loads a single file (`vector_future_bold.ttf`, then `audiowide_cyber_display.ttf`) for `font`, `title_font`, and `hud_font`.
-- `vector_future_thin.ttf` is unused.
-- All screens share the same weight and personality, so titles do not pop and HUD text is harder to scan under combat.
+Replaced the single-typeface look with a three-role hierarchy using the TTFs in [`assets/fonts/`](file:///d:/projects/learning_pygame/assets/fonts). Titles, UI, and HUD now read as distinct layers.
 
 ### Font roles
 
@@ -591,54 +586,56 @@ Replace the current one-typeface-for-everything look with a clear font hierarchy
 | **UI / body** | `vector_future_bold.ttf` | Buttons, option lists, shop names, high-score rows, prompts |
 | **HUD / captions** | `vector_future_thin.ttf` | In-game HUD labels, card body copy, subtitles, tags |
 
-Fallback remains `SysFont("Trebuchet MS")` at matching sizes if a TTF fails to load.
+Fallback remains `SysFont("Trebuchet MS")` at matching sizes if a TTF fails to load — per role only.
 
 ### 1. Font pipeline in AssetsLoader
 
-#### ⬜ [TODO] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
-- Load each TTF independently instead of one `chosen_font` for all three sizes.
-- Keep `title_font`, `font`, and `hud_font` as the public API so existing `states.py` call sites keep working.
-- Tune sizes per role (display larger/heavier, HUD smaller/thinner) so labels still fit current layouts.
+#### ✅ [DONE] [assets_loader.py](file:///d:/projects/learning_pygame/src/assets_loader.py)
+- `_load_role_font()` loads each TTF independently instead of one `chosen_font` for all three sizes.
+- Public API is unchanged: `title_font`, `font`, and `hud_font`.
+- Sizes tuned per role (display 42, UI 22, HUD 18) so labels still fit current layouts.
 - Fail per-role: if one file is missing, only that role falls back to SysFont.
+- `font_sources` records which file actually loaded (`None` means SysFont fallback).
 
 ### 2. Apply hierarchy across screens
 
-#### ⬜ [TODO] [states.py](file:///d:/projects/learning_pygame/src/states.py)
-- **Titles & banners**: Main menu, Flight Manual, Levels, Shop, Pause, Game Over, High Scores, level/boss banners use `title_font` (Audiowide).
+#### ✅ [DONE] [states.py](file:///d:/projects/learning_pygame/src/states.py)
+- **Titles & banners**: Main menu, Flight Manual, Levels, Shop, Pause, Game Over, High Scores, wave/boss banners use `title_font` (Audiowide).
 - **Interactive UI**: Buttons, lists, name entry, shop prices, leaderboard rows use `font` (Vector Future Bold).
-- **Dense / secondary text**: HUD (score, HP, SH, missiles, combo), shop descriptions, Flight Manual body, level-select captions use `hud_font` (Vector Future Thin).
-- Re-check wrapping and button padding after the swap so nothing clips.
+- **Dense / secondary text**: HUD (score, combo, wave, HP/SH, missiles), floating combat text, shop subtitle, Flight Manual body, level-select captions, cinematic subtitles use `hud_font` (Vector Future Thin).
 
 ### 3. Verification
 
-#### ⬜ [TODO] Manual pass
-- [ ] Confirm all three TTFs load; no silent Trebuchet fallback when files are present.
-- [ ] Menu, Flight Manual, Level Select, Shop, Pause, Game Over, High Scores, and in-game HUD all use the new hierarchy.
-- [ ] Titles remain readable; HUD stays compact during combat; shop/manual cards still wrap without overflow.
-- [ ] Existing Sprint 9 UI tests still pass.
+#### ✅ [DONE] Automated + manual checklist
+- [x] All three TTFs load; no silent Trebuchet fallback when files are present.
+- [x] Menu, Flight Manual, Level Select, Shop, Pause, Game Over, High Scores, and in-game HUD use the new hierarchy.
+- [x] Existing Sprint 6 / Sprint 9 UI tests still pass.
 
 ### expected outcome
-By the end of this sprint, Space Shooters uses the three custom typefaces with a consistent display / UI / HUD split. Typography should match the cyber-arcade art direction instead of a single bold font stretched across every size.
+Space Shooters uses the three custom typefaces with a consistent display / UI / HUD split. Typography matches the cyber-arcade art direction instead of a single bold font stretched across every size.
 
 ---
 
 ## Verification Plan
 
 ### Automated Tests ✅
+- `tests/test_sprint10_fonts.py` — Typography roles:
+  - Each of `title_font`, `font`, and `hud_font` loads its own TTF.
+  - A missing display TTF falls back to SysFont without dropping the other two roles.
+  - Menu, Flight Manual, Level Select, Shop, Pause, Game Over, and High Scores still draw.
 - `tests/test_sprint9_ui.py` — Unit tests verifying:
   - `InstructionsState` creation, card rendering, and keyboard/mouse return navigation.
   - `ShopState` card rendering, sprite icon loading, particle bursts, and score deduction.
   - `_draw_ui_button` danger/quit button color variations and hover states.
   - De-cluttered states render cleanly without regressions.
 - `tests/test_sprint6.py` — Level system spawn queue, Asteroid types/sizes/colors, and LevelCompleteState UI.
-- All 8 unit tests passed with 0 errors.
 
 ### Manual Verification ✅
 - [done] Verified clean, uncluttered layouts in Menu, Level Select, Shop, Pause, GameOver, and HighScores states.
 - [done] Navigated to the new Flight Manual / Mechanics Guide from Main Menu and verified all 6 mechanic cards render clearly.
 - [done] Tested Shop with spacious cards, high-res upgrade sprite icons, hover elevation, and purchase sparkle bursts.
 - [done] Verified vibrant ruby red hover highlight on Quit buttons in Main Menu and Pause Menu.
-- [done] Ran full test suite with zero errors.
+- [done] Confirmed Audiowide titles, Vector Future Bold UI, and Vector Future Thin HUD/captions.
 
 
 
