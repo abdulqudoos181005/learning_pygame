@@ -616,6 +616,299 @@ Space Shooters uses the three custom typefaces with a consistent display / UI / 
 
 ---
 
+## Sprint 11 — The Presentation Engine (Ship It Like It Was Built in a Real Engine)
+
+> **North star:** A player who has never seen the source should not be able to tell this was written in raw Pygame. It should feel like a shipped indie title: living ships, a directed soundtrack, a world that changes per mission, and a camera/HUD that *reacts*.
+
+> **Honest diagnosis:** Sprints 1–10 built a complete *game*. Sprint 11 builds the *engine around it*. We already own 318 curated assets (nebulae, faction fleets, thruster plumes, damage overlays, energy shields, cyber HUD, ship hangar parts, SFX). Almost none of that is driving the frame. Combat still draws onto a flat `(10, 10, 15)` fill with dotted `Starfield` circles, integer `rect` motion, a couple of `.play()` calls, and instant state swaps. That is the gap between “student project” and “I bought this on itch.io.”
+
+This sprint has **no feature-count ceiling**. It is one coordinated presentation stack, not a bag of polish tickets. Every pillar feeds the same loop: **identity → world → body → camera → audio → HUD → transition**.
+
+---
+
+### Architecture — new presentation layer (do not dump this into `states.py`)
+
+Treat this like a small engine, not more state methods.
+
+| Module | Role |
+| --- | --- |
+| [`src/render/pipeline.py`](file:///d:/projects/learning_pygame/src/render/pipeline.py) | Offscreen world canvas → shake → bloom/glow → chromatic fringe → vignette → letterbox → present. One `present(screen)` call per frame. |
+| [`src/render/camera.py`](file:///d:/projects/learning_pygame/src/render/camera.py) | Soft follow, punch-in on hits, zoom pulse on boss spawn / combo milestones, recovery damping. |
+| [`src/world/environment.py`](file:///d:/projects/learning_pygame/src/world/environment.py) | Layered nebula + void parallax from `space_environments/`, drifting dust, hyperspace warp on level enter. |
+| [`src/audio/director.py`](file:///d:/projects/learning_pygame/src/audio/director.py) | Buses (music / sfx / ui), ducking, cooldown-gated one-shots, stereo pan by x-position, music stems (menu / combat / boss / victory). |
+| [`src/input/actions.py`](file:///d:/projects/learning_pygame/src/input/actions.py) | Action map: keyboard + gamepad, rebindable, edge-triggered vs held. Kill `keys[K_SPACE]` sprinkled in sprites. |
+| [`src/persistence/settings.py`](file:///d:/projects/learning_pygame/src/persistence/settings.py) | `settings.json`: volumes, fullscreen, vsync-ish frame cap, shake intensity, keybinds, last hangar loadout. |
+| [`src/hangar/loadout.py`](file:///d:/projects/learning_pygame/src/hangar/loadout.py) | Ship class × color, weapon tint, starting kit. Applied when `PlayState` constructs `Player`. |
+| [`src/vfx/pool.py`](file:///d:/projects/learning_pygame/src/vfx/pool.py) | Object-pooled particles, muzzle flashes, hit sparks, floating numbers. No per-shot `Surface` alloc spikes. |
+| [`src/ui/hud.py`](file:///d:/projects/learning_pygame/src/ui/hud.py) | Finally extract HUD from `PlayState._draw_hud()`. Cyber numerals, life-counter sprites, custom reticle cursor. |
+
+`Game` becomes a thin host: window mode, settings, audio director, input map, then the active state. `PlayState` stops being a god-object for drawing.
+
+---
+
+### Pillar A — Living spacecraft (the player should *feel* mass)
+
+The ship is currently a static 60×60 blit that teleports by integer pixels. That is the #1 “this is Pygame” tell.
+
+#### Sub-pixel body + inertia
+- Store `pos_x / pos_y` as floats. `rect` is derived, never the source of truth.
+- Add **acceleration / drag** so the interceptor has mass. Speed boost should feel like afterburner (higher accel + longer exhaust), not a secret `* 1.5` on velocity.
+- Bank the sprite 6–12° toward lateral velocity. Subtle, but every real shmup does this.
+
+#### Thrusters that actually fire
+- Wire `vfx_effects/thruster_plumes/` to input: idle glow, throttle plume, afterburner length on speed boost / dash.
+- Additive (`BLEND_ADD`) exhaust so it blooms against nebulae.
+- Opposite: when the player is hit, thrusters stutter for 120ms.
+
+#### Battle damage as a language
+- Composite `player_fleet/damage_overlays/` (light / moderate / critical) onto the hull by HP thresholds (~70% / 40% / 15%).
+- Smoke / ember particles leak from the hull at moderate+ damage.
+- On respawn, overlays clear with a brief repair sparkle (`vfx_effects/sparkles/`).
+
+#### Shield as geometry, not a drawn circle
+- Use `vfx_effects/energy_shields/` (outer / core / dense) scaled to the ship.
+- Hit the bubble: ripple scale + chromatic flash, play `shield_down` only on break, `shield_up` on pickup / regen tick.
+- Shield regen (shop upgrade) should be *visible* as a slow inward fill, not a silent number.
+
+#### Muzzle, recoil, trails
+- Every shot: muzzle flash at cannon sockets, 1–2px visual recoil, projectile with a short additive trail.
+- Homing missiles leave a smoke ribbon and a lock-on diamond on the current target (highest HP) *before* launch if `M` is held 150ms — real games telegraph specials.
+
+**Wow moment:** take one hit at 20% HP, afterburner out of a cruiser volley, shield bubble cracking, hull smoking, camera punching in. If that still looks like a tutorial, the pillar failed.
+
+---
+
+### Pillar B — A universe per mission (stop drawing dots on navy)
+
+`space_environments/` exists. Combat still fills `(10,10,15)` and sprinkles circles.
+
+#### Three-layer parallax world
+1. Far: `void_black_stars` (slow drift).
+2. Mid: mission nebula (`nebula_sapphire_drift` / `abyss_violet` / `cosmic_magenta`) with wrap-scroll and very slow rotation or UV offset.
+3. Near: existing star motes + occasional debris silhouettes from tiny meteors, uncollidable, for depth.
+
+#### Faction theaters (the campaign should change *species*, not just HP multipliers)
+
+| Levels | Theater | Armada folder | Nebula | Boss mothership |
+| --- | --- | --- | --- | --- |
+| 1–2 | Bio nursery | `bio_swarm/` | sapphire | — |
+| 3–4 | Crimson raid | `crimson_raiders/` | magenta | — |
+| 5 | First mothership | mix + `boss_motherships/` | magenta + red grade | Cryo or Crimson saucer |
+| 6–7 | Cryo blockade | `cryo_legion/` | violet | — |
+| 8–9 | Shadow corps | `shadow_corps/` | abyss violet + desat | — |
+| 10 | Solar throne | all factions remnant + final saucer | magenta/violet pulse | `mothership_saucer_*` finale |
+
+Enemy sprites, projectile palettes, and ambient particle color **must** follow the theater. Level 8 should feel like a different game from Level 1 without touching the control scheme.
+
+#### Hyperspace arrive / leave
+- On level start: `speed_trails/hyperspace_warp_lines` streak, then the camera settles.
+- On level clear: reverse warp into the congratulations overlay — the universe *exits*, the UI does not just pop.
+
+---
+
+### Pillar C — Directed audio (mixer is not a soundtrack)
+
+Today: `pg.mixer.init()`, a few `Sound.play()`, boss track on spawn. That is a phone alarm, not a mix.
+
+#### Audio Director rules
+- **Buses:** Music, Combat SFX, UI. Independent sliders in Options.
+- **Ducking:** when a boss warning fires or the player dies, music ducks 6–8 dB for 400ms then restores.
+- **Voice of weapons:** player lasers use `laser_blaster_crisp` with pitch variance ±6%; enemy shots use `laser_retro_pew` / `alien_emp_zap` so factions are audible.
+- **One-shot gating:** never stack 12 identical laser WAVs on a held SPACE. Cooldown + voice stealing (max 4 concurrent laser voices).
+- **Spatial-lite:** pan explosions/pickups by `x / width` (−0.7 … 0.7). Cheap. Instant “this is 3D.”
+- **Stems / states:**
+  - Menu / hangar: low-intensity loop (reuse/trim boss theme at 60% rate or a procedural drone bed if only one music file exists — **generate a menu bed** from filtered noise + the existing theme pitched down rather than silence).
+  - Combat: bed in, percussion lift when combo ≥ 3×.
+  - Boss: existing `theme_boss_arcade_battle` with a hard stinger on phase change.
+  - Victory / defeat: `game_over_defeat` vs a pitched-up stinger; never cut music with a hard stop — 400ms fade.
+
+#### UI audio grammar
+- Hover: tiny tick. Confirm: chime. Danger (Quit): lower, shorter. Shop purchase: `powerup_bonus_chime`. These are what make menus feel like products.
+
+---
+
+### Pillar D — Camera, hit-stop, and a real post stack
+
+Screen shake already exists. It is not a camera.
+
+#### Camera
+- Dead-zone follow of the player (vertical bias so the fight stays above the ship).
+- **Hit-stop:** 30–50ms time scale drop on missile impacts, boss phase breaks, and combo ×5.
+- **Impulse:** directional kick opposite the damage vector (not random offset only).
+- Zoom: 1.00 default, 1.04 on boss intro, 1.02 while combo ≥ 4×, damped.
+
+#### Post-process (all realtime, all optional via settings for low-end)
+1. **Additive bloom:** downsample bright pixels (projectiles, explosions, thrusters), blur, upscale, `BLEND_ADD`. This single pass is the “Unity bloom” lie that sells the rest.
+2. **Damage vignette:** red at screen edge scaled by missing HP; cyan edge when shield is up.
+3. **Chromatic aberration:** 1px R/B split only during heavy shake / boss alert — never as a permanent soup.
+4. **Letterbox:** 24px during cinematics (boss warning, hyperspace, level complete). Gameplay HUD is hidden or dimmed in letterbox.
+5. **Speed lines:** `hyperspace_warp_lines` at low alpha while speed boost is active.
+
+Quality toggle in Options: Low (no bloom) / High (full stack). Default High.
+
+---
+
+### Pillar E — Hangar identity (the missing metagame fantasy)
+
+We have three hulls × four colors and a modular shipyard. The player is always a blue interceptor. That is unforgivable given the art.
+
+#### HangarState (between Menu and Level Select, also reachable from Menu)
+- 3D-carousel or 3-bay stage: Interceptor (balanced), Heavy Cruiser (more HP / slower / wider shot), Stealth Vanguard (faster / weaker / tighter hitbox, missiles start +1).
+- Color swatches: Blue / Green / Orange / Red. Recolor is a sprite swap (assets already exist).
+- Live preview: idle thruster loop, slow yaw, hangar sparkles, nameplate in Audiowide.
+- Confirm writes `settings.json` loadout; `PlayState` constructs from that, not a hardcoded alias.
+- Optional cosmetics using `modular_shipyard/` as *backdrop only* this sprint (greebles on the hangar wall) — do not block on a full ship builder.
+
+#### Run identity
+- Level-select tiles tint to the theater color of that mission.
+- HUD life icons use `ui_hud/life_counters/` matching the chosen hull/color — not generic `player` scaled down.
+
+---
+
+### Pillar F — HUD of a product, custom cursor, Options
+
+#### Extract `ui/hud.py`
+- Health / shield as segmented bars with glow, not two rounded rects.
+- Combo uses `ui_hud/cyber_numerals/` for the multiplier glyph.
+- Missiles as icons with a charge pip.
+- Boss bar: named (“CRIMSON MOTHERSHIP — PHASE 2”), not a naked red strip.
+- Hitmarker: 80ms white chevron on confirmed enemy hits (toggle in Options — some players hate it, some require it).
+
+#### Hardware cursor out, tactical reticle in
+- `ui_hud/reticle_cursor/crosshair_tactical_cursor` as the software cursor in menus and combat.
+- Combat: slight lerp so it isn’t glued 1:1 — feels aimed, not OS-pasted.
+- Hide OS cursor while focused.
+
+#### OptionsState (Pause and Main Menu)
+- Music / SFX / UI volume sliders.
+- Shake intensity, bloom on/off, hitmarkers on/off, fullscreen, screen flash on/off (accessibility).
+- Key rebind: Move, Fire, Missile, Pause. Gamepad: stick + A fire + RB missile + Start pause.
+- `Esc` from Options returns to caller without eating the pause action (input consume flag).
+
+#### Fullscreen / display
+- `F11` or Options toggle. Persist. Recreate display mode without destroying `AssetsLoader` caches (convert_alpha safety already exists — use it).
+
+---
+
+### Pillar G — Input like an engine (actions, not keycodes)
+
+- `InputMap` polled once per frame: `pressed`, `held`, `released` for `move`, `fire`, `missile`, `pause`, `confirm`, `cancel`.
+- Player sprite **must not** read `pg.key.get_pressed()` directly.
+- Gamepad hotplug: if a pad appears mid-run, rumble a tick and toast “PILOT LINKED”.
+- Rumble: light on shot volley (optional), medium on player hit, heavy on boss explode. Respect Options.
+
+This is what “developed in a game engine” actually means: a device-agnostic action graph.
+
+---
+
+### Pillar H — Cinematic state machine (no more hard cuts)
+
+Every `change_state` goes through a **Transition overlay** owned by `Game`:
+- 180–280ms fade / iris / warp, depending on context.
+- Menu → Hangar: fade.
+- Hangar → Levels: iris.
+- Levels → Play: hyperspace warp + letterbox.
+- Play → Pause: freeze world canvas, no warp.
+- Boss warning: already exists; upgrade to letterbox + music stinger + camera zoom + input lock with a visible “CONTROL LOCK” pip so it feels authored, not frozen-bug.
+- Death: 200ms desat + slow-mo, then Game Over. Lives remaining: respawn with the existing 4s i-frames *plus* a repair montage overlay for 400ms.
+
+Held-key consume from Sprint 7 remains law: no transition may fire twice.
+
+---
+
+### Pillar I — Encounter direction (stop spawning a bag of HP)
+
+Presentation without direction still feels cheap. Light encounter authorship on top of existing `LevelSystem`:
+
+- **Formations:** V, line-abreast, diving pair, elite escort. Scouts should not all independently drunk-walk from `y = -40`.
+- **Telegraphs:** 400ms warning chevron under a cruiser before it dumps a volley (reuse boss-warning language at small scale).
+- **Elites:** 1 in N cruisers gets a nameplate + health pip + unique projectile. Killing it is a combo feeder.
+- **Asteroid weather:** theater-tinted density (bio = sparse, shadow = dense iron). Telegraph a “DEBRIS FRONT” stripe 1.5s before a dense belt.
+- **Breathing:** 1.2s spawn gap after every wave clear with a soft chime — the player must *feel* they won the wave before the next one.
+
+Do **not** retune all 10 levels from scratch. Author formations as data next to `LEVEL_CONFIGS` (`formation`, `elite`, `debris`).
+
+---
+
+### Pillar J — Performance & “engine” hygiene (60 FPS is a promise)
+
+Bloom + particles will murder an unpooled Pygame loop. Budget it.
+
+- Particle **pool** (preallocated 256–512). Explosions checkout/return. Never `Sprite()` spam on a cruiser death at 10× combo.
+- Dirty: convert all loaded images with `convert_alpha()` once; never per frame.
+- World canvas at native 1280×720; bloom at quarter-res.
+- Profile a “worst frame”: 30 enemies, 80 projectiles, 200 particles, bloom on. Cap dt as today. If frame time > 16ms on the dev machine, drop bloom auto and toast once.
+- Float math for motion; round only at blit.
+
+---
+
+### Implementation order (build like a lead, not like a magpie)
+
+1. **Settings + InputMap + OptionsState** — everything else reads from here.
+2. **Render pipeline + camera** — even the current art will start to feel expensive.
+3. **Environment + faction theaters** — the campaign becomes a journey.
+4. **Living ship (inertia, thrusters, damage, shield sprites).**
+5. **Audio Director** — mix last visual pass to the new picture.
+6. **Hangar + HUD extract + reticle.**
+7. **Transitions + hit-stop + letterbox cinematics.**
+8. **Formations / telegraphs / debris weather.**
+9. **Pooling, fullscreen, gamepad, rumble, accessibility toggles.**
+10. **Playtest pass:** 10-level run, eyes closed audio-only 30 seconds, screenshot vs a Steam shmup.
+
+If time explodes, cut order is: formations (I) → hangar cosmetics → chromatic aberration. **Do not cut bloom, thrusters, nebulae, audio buses, or Options.** Those are the identity of this sprint.
+
+---
+
+### Acceptance criteria — the “impress me” bar
+
+A stranger records a 45-second clip of Level 5. The clip must contain **all** of:
+
+- [ ] A nebula that is recognizably not a dotted starfield.
+- [ ] A player ship that banks, trails thrust, and shows damage after hits.
+- [ ] A shield that looks like a forcefield asset, not `pg.draw.circle`.
+- [ ] Camera punch + bloom on a missile detonation.
+- [ ] Boss music that was already in the bed, then *lifts*, not a sudden `.play()`.
+- [ ] A named boss bar and a letterboxed warning.
+- [ ] HUD numerals / life icons from `ui_hud/`, software reticle visible.
+- [ ] Fade or warp into the fight, not an instant blit from the level grid.
+
+Plus product checks:
+
+- [ ] Hangar selection persists after restart.
+- [ ] Options volumes persist; mute music does not mute UI ticks.
+- [ ] Gamepad can finish Level 1 without touching the keyboard.
+- [ ] Fullscreen round-trips without losing audio or fonts.
+- [ ] Accessibility: disable shake + screen flash and the game remains readable.
+- [ ] 60 FPS on High during a busy Level 8 wave, or auto-drop to Low bloom with a single notice.
+
+---
+
+### Tests (Sprint 11)
+
+#### Automated
+- `tests/test_sprint11_pipeline.py` — pipeline presents without crashing; Low quality skips bloom path; shake offset applied at present.
+- `tests/test_sprint11_input.py` — action map: held fire does not generate extra `pressed` edges; rebind persists in a temp `settings.json`.
+- `tests/test_sprint11_audio.py` — director respects bus volumes; laser voice cap ≤ 4; fade does not throw if mixer uninitialized (headless).
+- `tests/test_sprint11_hangar.py` — each class×color resolves to an indexed sprite; `PlayState` player image follows loadout.
+- `tests/test_sprint11_theaters.py` — levels 1, 5, 8, 10 map to distinct armada roots and nebula keys.
+- Existing Sprint 6 / 9 / 10 tests still pass.
+
+#### Manual
+- Full campaign screenshot log (L1, L5 intro, L8, L10 victory).
+- Headphones pass: pan, duck, no laser machine-gun WAV stacking.
+- Pad pass + keyboard rebind pass.
+- Low HP + afterburner + asteroid belt stress clip.
+
+---
+
+### Expected outcome
+
+Space Shooters stops looking like a well-structured Pygame tutorial with expensive Kenney art sitting in a folder. It looks like a **directed arcade product**: a hangar you picked, a theater you flew into, a ship that bleeds and burns, a camera that flinches, a mix that breathes, and UI that belongs on a store page.
+
+That is Sprint 11. That is the last mile between “it works” and “it *ships*.”
+
+---
+
 ## Verification Plan
 
 ### Automated Tests ✅
