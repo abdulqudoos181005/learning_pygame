@@ -2,6 +2,7 @@
 import pygame as pg
 import random
 import math
+from vfx.player_presentation import PlayerPresentation
 
 class Player(pg.sprite.Sprite):
     def __init__(self, game, x, y):
@@ -10,6 +11,18 @@ class Player(pg.sprite.Sprite):
         self.base_image = self.game.assets.get_image("player", 60, 60)
         self.image = self.base_image.copy()
         self.rect = self.image.get_rect(center=(x, y))
+        self.pos_x = float(x)
+        self.pos_y = float(y)
+        self.velocity = pg.Vector2(0, 0)
+        self.max_speed = 400.0
+        self.acceleration = 1800.0
+        self.drag = 8.0
+        self.bank_angle = 0.0
+        self.recoil_timer = 0.0
+        self.hit_stutter = 0.0
+        self.muzzle_timer = 0.0
+        self.missile_hold_timer = 0.0
+        self.presentation = PlayerPresentation(self)
         
         # Stats
         self.speed = 400.0  # Pixels per second
@@ -49,9 +62,12 @@ class Player(pg.sprite.Sprite):
         if self.invincible_timer > 0:
             return False
 
+        shield_broke = False
         if self.shield > 0:
             self.shield -= damage
-            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            shield_broke = self.shield <= 0
+            self.presentation.trigger_shield_ripple()
+            if shield_broke and hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                 self.game.assets.get_sound("shield_down").play()
             if self.shield < 0:
                 self.health += self.shield # Apply remaining damage to health
@@ -62,16 +78,21 @@ class Player(pg.sprite.Sprite):
         # Trigger screen shake on taking damage
         if hasattr(self.game.state, 'trigger_shake'):
             self.game.state.trigger_shake(duration=0.2, magnitude=5)
+        self.hit_stutter = 0.12
             
         if self.health <= 0:
             self.lives -= 1
             self.health = self.max_health
             self.shield = 0
             self.activate_invincibility(4.0)
+            self.presentation.trigger_repair()
             if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                 self.game.assets.get_sound("player_death").play()
             # Reset position
-            self.rect.center = (self.game.width // 2, self.game.height - 80)
+            self.pos_x = float(self.game.width // 2)
+            self.pos_y = float(self.game.height - 80)
+            self.velocity.update(0, 0)
+            self.rect.center = (round(self.pos_x), round(self.pos_y))
             return True # Died
         return False
 
@@ -87,6 +108,10 @@ class Player(pg.sprite.Sprite):
             self.laser_power_timer -= dt
         if self.missile_cooldown > 0:
             self.missile_cooldown -= dt
+        self.recoil_timer = max(0.0, self.recoil_timer - dt)
+        self.hit_stutter = max(0.0, self.hit_stutter - dt)
+        self.muzzle_timer = max(0.0, self.muzzle_timer - dt)
+        self.presentation.update(dt)
         if self.invincible_timer > 0:
             self.invincible_timer -= dt
             self.flash_timer += dt
@@ -98,7 +123,7 @@ class Player(pg.sprite.Sprite):
             
         self.shield_active = self.shield > 0
 
-        # Movement keys
+        # Movement keys feed an inertial body; the rect remains the collision view.
         keys = pg.key.get_pressed()
         dx, dy = 0.0, 0.0
         
@@ -117,21 +142,32 @@ class Player(pg.sprite.Sprite):
             dx /= length
             dy /= length
             
-            # Apply speed boost power-up if active
-            current_speed = self.speed * 1.5 if self.speed_boost_timer > 0 else self.speed
-            
-            self.rect.x += dx * current_speed * dt
-            self.rect.y += dy * current_speed * dt
+        desired = pg.Vector2(dx, dy)
+        boost = 1.5 if self.speed_boost_timer > 0 else 1.0
+        self.max_speed = self.speed * boost
+        if desired.length_squared() > 0:
+            desired.scale_to_length(self.max_speed)
+            self.velocity += (desired - self.velocity) * min(1.0, self.acceleration * dt / max(1.0, self.max_speed))
+        else:
+            self.velocity *= max(0.0, 1.0 - self.drag * dt)
+        if self.velocity.length() > self.max_speed:
+            self.velocity.scale_to_length(self.max_speed)
+        self.pos_x += self.velocity.x * dt
+        self.pos_y += self.velocity.y * dt
 
         # Screen boundaries check
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > self.game.width:
-            self.rect.right = self.game.width
-        if self.rect.top < 0:
-            self.rect.top = 0
-        if self.rect.bottom > self.game.height:
-            self.rect.bottom = self.game.height
+        half_w, half_h = self.rect.width / 2, self.rect.height / 2
+        self.pos_x = max(half_w, min(self.game.width - half_w, self.pos_x))
+        self.pos_y = max(half_h, min(self.game.height - half_h, self.pos_y))
+        self.bank_angle = max(-12.0, min(12.0, self.velocity.x / max(1.0, self.max_speed) * 12.0))
+        rotated = pg.transform.rotozoom(self.base_image, self.bank_angle, 1.0)
+        if self.recoil_timer > 0:
+            rotated = pg.transform.smoothscale(
+                rotated,
+                (rotated.get_width(), max(1, rotated.get_height() - 2)),
+            )
+        self.image = rotated
+        self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
         # Fire regular weapons
         if keys[pg.K_SPACE] or keys[pg.K_j]:
@@ -139,12 +175,17 @@ class Player(pg.sprite.Sprite):
         
         # Launch missile (M key) — homing special weapon
         if keys[pg.K_m] and self.missile_count > 0 and self.missile_cooldown <= 0:
+            self.missile_hold_timer += dt
             self._launch_missile()
             self.missile_cooldown = 0.5  # Half-second cooldown between launches
+        elif not keys[pg.K_m]:
+            self.missile_hold_timer = 0.0
 
     def shoot(self):
         if self.shoot_timer <= 0:
             self.shoot_timer = self.shoot_cooldown
+            self.recoil_timer = 0.06
+            self.muzzle_timer = 0.07
             if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                 self.game.assets.get_sound("laser").play()
             
@@ -172,6 +213,17 @@ class Player(pg.sprite.Sprite):
                 laser = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, damage=laser_dmg, img_name=img_name)
                 state.player_lasers.add(laser)
                 state.all_sprites.add(laser)
+
+    def _missile_target(self):
+        state = self.game.state
+        enemies = getattr(state, "enemies", ())
+        return max(enemies, key=lambda enemy: enemy.health, default=None)
+
+    def draw_presentation_back(self, surface):
+        self.presentation.draw_back(surface)
+
+    def draw_presentation_front(self, surface):
+        self.presentation.draw_front(surface)
 
     def _launch_missile(self):
         """Spawns a homing Missile targeting the highest-health enemy on screen."""
@@ -206,6 +258,9 @@ class Laser(pg.sprite.Sprite):
             self.image = self.raw_image
             
         self.rect = self.image.get_rect(center=(x, y))
+        self.fx = float(x)
+        self.fy = float(y)
+        self.trail = []
         
         # Resolve speed into X/Y components accounting for angle
         if is_player:
@@ -216,12 +271,26 @@ class Laser(pg.sprite.Sprite):
             self.speed_y = abs(speed_y) * math.cos(math.radians(self.angle))
 
     def update(self, dt):
-        self.rect.x += self.speed_x * dt
-        self.rect.y += self.speed_y * dt
+        self.trail.append((self.fx, self.fy))
+        if len(self.trail) > 5:
+            self.trail.pop(0)
+        self.fx += self.speed_x * dt
+        self.fy += self.speed_y * dt
+        self.rect.center = (round(self.fx), round(self.fy))
         
         # Kill if it leaves screen boundaries
         if self.rect.bottom < 0 or self.rect.top > self.game.height or self.rect.right < 0 or self.rect.left > self.game.width:
             self.kill()
+
+    def draw_trail(self, surface):
+        if len(self.trail) < 2:
+            return
+        color = (80, 220, 255) if self.speed_y < 0 else (255, 80, 100)
+        for index in range(1, len(self.trail)):
+            alpha = int(35 + index * 30)
+            layer = pg.Surface((max(2, self.rect.width), max(2, self.rect.height)), pg.SRCALPHA)
+            pg.draw.line(layer, (*color, alpha), (layer.get_width() // 2, layer.get_height()), (layer.get_width() // 2, 0), 2)
+            surface.blit(layer, layer.get_rect(center=(round(self.trail[index - 1][0]), round(self.trail[index - 1][1]))), special_flags=pg.BLEND_ADD)
 
 
 class Enemy(pg.sprite.Sprite):
@@ -498,6 +567,7 @@ class Missile(pg.sprite.Sprite):
         # Float positions for sub-pixel precision
         self.fx = float(x)
         self.fy = float(y)
+        self.trail = []
 
     def _find_target(self):
         """Returns the enemy sprite with the highest current health, or None."""
@@ -510,6 +580,9 @@ class Missile(pg.sprite.Sprite):
         return best
 
     def update(self, dt):
+        self.trail.append((self.fx, self.fy))
+        if len(self.trail) > 14:
+            self.trail.pop(0)
         target = self._find_target()
         if target:
             # Vector from missile to target
@@ -537,6 +610,16 @@ class Missile(pg.sprite.Sprite):
         if (self.rect.bottom < 0 or self.rect.top > self.game.height
                 or self.rect.right < 0 or self.rect.left > self.game.width):
             self.kill()
+
+    def draw_trail(self, surface):
+        if len(self.trail) < 2:
+            return
+        for index in range(1, len(self.trail)):
+            alpha = int(20 + index * 10)
+            radius = max(1, int(index / 5))
+            glow = pg.Surface((radius * 6, radius * 6), pg.SRCALPHA)
+            pg.draw.circle(glow, (255, 150, 45, alpha), glow.get_rect().center, radius)
+            surface.blit(glow, glow.get_rect(center=(round(self.trail[index - 1][0]), round(self.trail[index - 1][1]))), special_flags=pg.BLEND_ADD)
 
 
 class PowerUp(pg.sprite.Sprite):

@@ -1044,7 +1044,12 @@ class PlayState(State):
         self.starfield.draw(self.canvas)
 
         # Game elements
+        self.player.draw_presentation_back(self.canvas)
+        for projectile in (*self.player_lasers, *self.enemy_lasers, *self.missiles):
+            if hasattr(projectile, "draw_trail"):
+                projectile.draw_trail(self.canvas)
         self.all_sprites.draw(self.canvas)
+        self.player.draw_presentation_front(self.canvas)
         self.particles.draw(self.canvas)
         self._draw_float_text(self.canvas)
 
@@ -1063,20 +1068,6 @@ class PlayState(State):
             scaled = pg.transform.smoothscale(msg, (int(msg.get_width() * pulse), int(msg.get_height() * pulse)))
             scaled_rect = scaled.get_rect(center=msg_rect.center)
             self.canvas.blit(scaled, scaled_rect)
-
-        # Draw glowing neon shield barrier aura around player if shield points exist
-        if self.player.shield > 0:
-            shield_radius = 42
-            shield_surf = pg.Surface((shield_radius * 2, shield_radius * 2), pg.SRCALPHA)
-            # Create a pulsing transparency effect using a sine wave timer
-            alpha = int(80 + math.sin(pg.time.get_ticks() * 0.01) * 30)
-            
-            # Draw outer shield shell ring
-            pg.draw.circle(shield_surf, (0, 180, 255, alpha), (shield_radius, shield_radius), shield_radius, 3)
-            # Draw semi-transparent shield filling interior
-            pg.draw.circle(shield_surf, (0, 100, 255, alpha // 3), (shield_radius, shield_radius), shield_radius - 2)
-            # Center the shield aura relative to player coordinates
-            self.canvas.blit(shield_surf, shield_surf.get_rect(center=self.player.rect.center))
 
         # Render User Interface HUD (Health, Shields, Level/Wave text, timers)
         self._draw_hud()
