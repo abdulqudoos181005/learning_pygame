@@ -6,6 +6,7 @@ from sprites import Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid
 from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
 from level_system import LevelSystem
+from world.environment import SpaceEnvironment
 
 
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
@@ -563,9 +564,11 @@ class PlayState(State):
     """
     def __init__(self, game, selected_level=1):
         super().__init__(game)
-        # Background starfield (higher density of stars for active speed feel)
-        self.starfield = Starfield(self.game.width, self.game.height, num_stars=120)
         self.selected_level = max(1, min(int(selected_level), 10))
+        # Sprint 11: layered per-mission parallax world (far void / mid nebula / near motes+debris)
+        # replaces the flat navy fill, and reskins to the level's faction theater.
+        self.environment = SpaceEnvironment(self.game.assets, self.game.width, self.game.height, self.selected_level)
+        self.environment.start_warp_in()
         self.save_system = SaveSystem()
         self.kills_since_powerup = 0
 
@@ -714,7 +717,7 @@ class PlayState(State):
             self.player.shield = min(self.player.max_shield, self.player.shield + regen * dt)
 
         # 2. BACKGROUND ANIMATION
-        self.starfield.update(dt)
+        self.environment.update(dt)
 
         # 3. ASTEROID HAZARDS (Sprint 6)
         self.asteroid_timer -= dt
@@ -737,20 +740,24 @@ class PlayState(State):
                     self.level_sys.spawned = 0  # allow boss tick to re-fire after warning
                     self.game.change_state(BossWarningState(self.game, self))
                     return
-                # Spawn the Boss with level-scaled multipliers
+                # Spawn the Boss with level-scaled multipliers, skinned to the mission's faction theater
                 cfg = self.level_sys.current_wave_cfg
+                theater = self.environment.theater
                 self.boss_instance = Boss(
                     self.game,
                     hp_mult=cfg["hp_mult"],
                     spd_mult=cfg["spd_mult"],
+                    boss_key=theater["boss_key"],
+                    laser_key=theater["laser_key"],
                 )
                 self.enemies.add(self.boss_instance)
                 self.all_sprites.add(self.boss_instance)
                 self.boss_active = True
 
             elif spawn_type is not None:
-                # Regular enemy spawn with level multipliers
+                # Regular enemy spawn with level multipliers, skinned to the mission's faction theater
                 cfg = self.level_sys.current_wave_cfg
+                theater = self.environment.theater
                 enemy = Enemy(
                     self.game,
                     random.randint(60, self.game.width - 60),
@@ -758,6 +765,8 @@ class PlayState(State):
                     enemy_type=spawn_type,
                     hp_mult=cfg["hp_mult"],
                     spd_mult=cfg["spd_mult"],
+                    armada_folder=random.choice(theater["armadas"]),
+                    laser_key=theater["laser_key"],
                 )
                 self.enemies.add(enemy)
                 self.all_sprites.add(enemy)
@@ -783,12 +792,16 @@ class PlayState(State):
                 if result == "level":
                     # Persist any cleared intermediate level so the selector reflects progress.
                     self.save_system.save_progress(cleared_level)
-                    self.game.change_state(ShopState(self.game, self.score, cleared_level))
+                    self.game.change_state(HyperspaceExitState(
+                        self.game, self, ShopState(self.game, self.score, cleared_level)
+                    ))
                     return
                 elif result == "complete":
                     self.save_system.save_progress(self.selected_level, completed_levels=list(range(1, 11)))
                     # All 10 levels beaten — show victory screen
-                    self.game.change_state(GameCompleteState(self.game, self.score))
+                    self.game.change_state(HyperspaceExitState(
+                        self.game, self, GameCompleteState(self.game, self.score)
+                    ))
                     return
 
         # 5. SPRITE & PARTICLE PHYSICS
@@ -1037,11 +1050,9 @@ class PlayState(State):
             self.kills_since_powerup = 0
 
     def draw(self, screen):
-        # Draw everything onto the offscreen double-buffer canvas
-        self.canvas.fill((10, 10, 15))
-
-        # Starfield background scrolling
-        self.starfield.draw(self.canvas)
+        # Sprint 11: layered per-mission parallax world (far void / mid nebula / near motes+debris)
+        # replaces the flat navy fill, and plays the hyperspace warp overlay while active.
+        self.environment.draw(self.canvas)
 
         # Game elements
         self.player.draw_presentation_back(self.canvas)
@@ -1493,10 +1504,14 @@ class BossDefeatedState(State):
             self.play_state.player.base_laser_tier = self.play_state._laser_tier_for_level(level_sys.level_number)
             if result == "level":
                 save_sys.save_progress(self.cleared_level)
-                self.game.change_state(ShopState(self.game, score, self.cleared_level))
+                self.game.change_state(HyperspaceExitState(
+                    self.game, self.play_state, ShopState(self.game, score, self.cleared_level)
+                ))
             elif result == "complete":
                 save_sys.save_progress(self.play_state.selected_level, completed_levels=list(range(1, 11)))
-                self.game.change_state(GameCompleteState(self.game, score))
+                self.game.change_state(HyperspaceExitState(
+                    self.game, self.play_state, GameCompleteState(self.game, score)
+                ))
             else:
                 # Just continue playing (next wave)
                 self.game.change_state(self.play_state)
@@ -1527,6 +1542,38 @@ class BossDefeatedState(State):
 
         sub = self.game.assets.hud_font.render("Excellent work, pilot!", True, (200, 255, 200))
         screen.blit(sub, sub.get_rect(center=(self.game.width // 2, self.game.height // 2 + 50)))
+
+
+# ---------------------------------------------------------------------------
+# Sprint 11 / Pillar B — HyperspaceExitState
+# ---------------------------------------------------------------------------
+class HyperspaceExitState(State):
+    """
+    Sprint 11 — brief reverse-warp cinematic played when a mission is cleared.
+
+    Keeps the frozen PlayState visible while its SpaceEnvironment streaks into
+    a reverse hyperspace warp, so the universe *exits* before the congratulations
+    screen (ShopState / GameCompleteState) pops in, instead of an instant cut.
+    """
+    def __init__(self, game, play_state, next_state):
+        super().__init__(game)
+        self.play_state = play_state
+        self.next_state = next_state
+        self.timer = 0.0
+        self.duration = play_state.environment.WARP_OUT_DURATION
+        play_state.environment.start_warp_out()
+
+    def handle_events(self, events):
+        pass  # lock input during the cinematic
+
+    def update(self, dt):
+        self.timer += dt
+        self.play_state.environment.update(dt)
+        if self.timer >= self.duration:
+            self.game.change_state(self.next_state)
+
+    def draw(self, screen):
+        self.play_state.draw(screen)
 
 
 # ---------------------------------------------------------------------------

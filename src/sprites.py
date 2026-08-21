@@ -3,6 +3,7 @@ import pygame as pg
 import random
 import math
 from vfx.player_presentation import PlayerPresentation
+from level_system import armada_image_key
 
 class Player(pg.sprite.Sprite):
     def __init__(self, game, x, y):
@@ -294,21 +295,26 @@ class Laser(pg.sprite.Sprite):
 
 
 class Enemy(pg.sprite.Sprite):
-    def __init__(self, game, x, y, enemy_type="scout", hp_mult=1.0, spd_mult=1.0):
+    def __init__(self, game, x, y, enemy_type="scout", hp_mult=1.0, spd_mult=1.0, armada_folder=None, laser_key=None):
         super().__init__()
         self.game = game
         self.type = enemy_type
-        
+        self.laser_key = laser_key or "laser_enemy"
+
+        def _sprite_key(role, fallback_alias):
+            # Sprint 11: theater-driven armada folder picks the faction skin; otherwise keep the old static alias.
+            return armada_image_key(armada_folder, role) if armada_folder else fallback_alias
+
         # Configure variables based on enemy type
         if self.type == "scout":
-            self.image = self.game.assets.get_image("enemy_scout", 45, 45)
+            self.image = self.game.assets.get_image(_sprite_key("scout", "enemy_scout"), 45, 45)
             self.speed_y = random.randint(180, 240) * spd_mult
             self.speed_x = 0
             self.max_health = int(10 * hp_mult)
             self.shoot_delay = 9999.0 # Scouts don't shoot
             self.score_value = 100
         elif self.type == "stinger":
-            self.image = self.game.assets.get_image("enemy_stinger", 48, 48)
+            self.image = self.game.assets.get_image(_sprite_key("stinger", "enemy_stinger"), 48, 48)
             self.speed_y = random.randint(100, 150) * spd_mult
             # Gentle side-to-side sweeping motion
             self.speed_x = random.choice([-80, 80]) * spd_mult
@@ -316,20 +322,20 @@ class Enemy(pg.sprite.Sprite):
             self.shoot_delay = random.uniform(1.5, 2.5)
             self.score_value = 250
         elif self.type == "cruiser":
-            self.image = self.game.assets.get_image("enemy_cruiser", 70, 70)
+            self.image = self.game.assets.get_image(_sprite_key("cruiser", "enemy_cruiser"), 70, 70)
             self.speed_y = random.randint(50, 80) * spd_mult
             self.speed_x = 0
             self.max_health = int(60 * hp_mult)
             self.shoot_delay = random.uniform(2.0, 3.5)
             self.score_value = 500
         else: # default placeholder
-            self.image = self.game.assets.get_image("enemy_scout", 45, 45)
+            self.image = self.game.assets.get_image(_sprite_key("scout", "enemy_scout"), 45, 45)
             self.speed_y = 150 * spd_mult
             self.speed_x = 0
             self.max_health = int(10 * hp_mult)
             self.shoot_delay = 3.0
             self.score_value = 100
-            
+
         self.health = self.max_health
         self.rect = self.image.get_rect(center=(x, y))
         self.shoot_timer = random.uniform(0.5, self.shoot_delay)
@@ -384,23 +390,24 @@ class Enemy(pg.sprite.Sprite):
             self.game.assets.get_sound("laser_pew").play()
 
         if self.type == "stinger":
-            # Shoot standard red laser down
-            laser = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=400)
+            # Shoot a laser down, colored to the mission's faction theater
+            laser = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=400, img_name=self.laser_key)
             state.enemy_lasers.add(laser)
             state.all_sprites.add(laser)
         elif self.type == "cruiser":
-            # Shoot double lasers
-            l1 = Laser(self.game, self.rect.left + 15, self.rect.bottom, speed_y=350)
-            l2 = Laser(self.game, self.rect.right - 15, self.rect.bottom, speed_y=350)
+            # Shoot double lasers, colored to the mission's faction theater
+            l1 = Laser(self.game, self.rect.left + 15, self.rect.bottom, speed_y=350, img_name=self.laser_key)
+            l2 = Laser(self.game, self.rect.right - 15, self.rect.bottom, speed_y=350, img_name=self.laser_key)
             state.enemy_lasers.add(l1, l2)
             state.all_sprites.add(l1, l2)
 
 
 class Boss(pg.sprite.Sprite):
-    def __init__(self, game, hp_mult=1.0, spd_mult=1.0):
+    def __init__(self, game, hp_mult=1.0, spd_mult=1.0, boss_key=None, laser_key=None):
         super().__init__()
         self.game = game
-        self.image = self.game.assets.get_image("boss", 150, 100)
+        self.image = self.game.assets.get_image(boss_key or "boss", 150, 100)
+        self.laser_key = laser_key or "laser_enemy"
         self.rect = self.image.get_rect(center=(self.game.width // 2, -100))
         
         # Stats (scaled by level multipliers)
@@ -464,9 +471,9 @@ class Boss(pg.sprite.Sprite):
             self.game.assets.get_sound("laser_pew").play()
 
         if self.attack_phase == 1:
-            # Fire standard red lasers from left and right gun pods
-            l1 = Laser(self.game, self.rect.centerx - 40, self.rect.bottom, speed_y=380)
-            l2 = Laser(self.game, self.rect.centerx + 40, self.rect.bottom, speed_y=380)
+            # Fire lasers from left and right gun pods, colored to the mission's faction theater
+            l1 = Laser(self.game, self.rect.centerx - 40, self.rect.bottom, speed_y=380, img_name=self.laser_key)
+            l2 = Laser(self.game, self.rect.centerx + 40, self.rect.bottom, speed_y=380, img_name=self.laser_key)
             state.enemy_lasers.add(l1, l2)
             state.all_sprites.add(l1, l2)
             
@@ -485,9 +492,9 @@ class Boss(pg.sprite.Sprite):
             state.all_sprites.add(l1, l2, l3)
             
         elif self.attack_phase == 3:
-            # Rapid fire sweeping single lasers
+            # Rapid fire sweeping single lasers, colored to the mission's faction theater
             angle = random.uniform(-40, 40)
-            l = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=480, angle=angle)
+            l = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=480, angle=angle, img_name=self.laser_key)
             state.enemy_lasers.add(l)
             state.all_sprites.add(l)
 

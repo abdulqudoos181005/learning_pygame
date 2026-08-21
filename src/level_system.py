@@ -133,6 +133,119 @@ LEVEL_CONFIGS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Sprint 11 / Pillar B — Faction theaters
+#
+# Maps each level range onto the armada folder(s), nebula, boss mothership,
+# and projectile palette that should skin that mission, per the campaign
+# table in implementation_plan.md. Only 3 projectile-color folders exist
+# (blue_photon_beams / green_plasma_beams / red_crimson_beams), so theaters
+# without a matching hue reuse the closest available color.
+# ---------------------------------------------------------------------------
+
+ARMADA_PREFIX = {
+    "bio_swarm": "bio",
+    "crimson_raiders": "crimson",
+    "cryo_legion": "cryo",
+    "shadow_corps": "shadow",
+}
+
+# Generic enemy type -> shared per-faction ship-role suffix (each armada
+# folder mirrors the same 5-ship naming pattern).
+ENEMY_ROLE_SUFFIX = {
+    "scout": "scout_dart",
+    "stinger": "wasp_stinger",
+    "cruiser": "heavy_cruiser",
+}
+
+
+def armada_image_key(armada_folder, enemy_type):
+    """Builds the theater-specific sprite filename for an enemy role (e.g. 'crimson_wasp_stinger')."""
+    prefix = ARMADA_PREFIX.get(armada_folder, "bio")
+    suffix = ENEMY_ROLE_SUFFIX.get(enemy_type, "scout_dart")
+    return f"{prefix}_{suffix}"
+
+
+THEATERS = [
+    {   # Levels 1-2 - Bio nursery
+        "name": "Bio Nursery",
+        "armadas": ["bio_swarm"],
+        "nebula": "nebula_sapphire_drift",
+        "nebula_secondary": None,
+        "grade": None,
+        "accent_color": (110, 170, 255),
+        "boss_key": None,
+        "laser_key": "laser_blue_beam_stream_long",
+    },
+    {   # Levels 3-4 - Crimson raid
+        "name": "Crimson Raid",
+        "armadas": ["crimson_raiders"],
+        "nebula": "nebula_cosmic_magenta",
+        "nebula_secondary": None,
+        "grade": None,
+        "accent_color": (255, 110, 150),
+        "boss_key": None,
+        "laser_key": "laser_red_beam_stream_long",
+    },
+    {   # Level 5 - First mothership (mix of the two prior factions, red-graded magenta nebula)
+        "name": "First Mothership",
+        "armadas": ["bio_swarm", "crimson_raiders"],
+        "nebula": "nebula_cosmic_magenta",
+        "nebula_secondary": None,
+        "grade": ((200, 40, 40), 60),
+        "accent_color": (255, 90, 90),
+        "boss_key": "mothership_saucer_crimson_red",
+        "laser_key": "laser_red_beam_stream_long",
+    },
+    {   # Levels 6-7 - Cryo blockade
+        "name": "Cryo Blockade",
+        "armadas": ["cryo_legion"],
+        "nebula": "nebula_abyss_violet",
+        "nebula_secondary": None,
+        "grade": None,
+        "accent_color": (160, 130, 255),
+        "boss_key": None,
+        "laser_key": "laser_blue_beam_stream_long",
+    },
+    {   # Levels 8-9 - Shadow corps (same violet nebula, desaturated grade)
+        "name": "Shadow Corps",
+        "armadas": ["shadow_corps"],
+        "nebula": "nebula_abyss_violet",
+        "nebula_secondary": None,
+        "grade": ((100, 95, 110), 90),
+        "accent_color": (120, 110, 140),
+        "boss_key": None,
+        "laser_key": "laser_green_beam_stream_long",
+    },
+    {   # Level 10 - Solar throne (all factions remnant + final saucer, magenta/violet pulse)
+        "name": "Solar Throne",
+        "armadas": ["bio_swarm", "crimson_raiders", "cryo_legion", "shadow_corps"],
+        "nebula": "nebula_cosmic_magenta",
+        "nebula_secondary": "nebula_abyss_violet",
+        "grade": None,
+        "accent_color": (255, 140, 190),
+        "boss_key": "mothership_saucer_solar_gold",
+        "laser_key": "laser_red_beam_stream_long",
+    },
+]
+
+
+def get_theater(level_number):
+    """Returns the faction-theater config dict for a given 1-based level number."""
+    level_number = max(1, min(int(level_number), 10))
+    if level_number <= 2:
+        return THEATERS[0]
+    if level_number <= 4:
+        return THEATERS[1]
+    if level_number == 5:
+        return THEATERS[2]
+    if level_number <= 7:
+        return THEATERS[3]
+    if level_number <= 9:
+        return THEATERS[4]
+    return THEATERS[5]
+
+
 class LevelSystem:
     """
     Manages the current level, wave-within-level, and enemy spawn scheduling.
