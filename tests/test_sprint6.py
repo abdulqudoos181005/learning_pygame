@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 import pygame
 
 pygame.init()
+pygame.font.init()
 pygame.display.set_mode((1280, 720))
 
 from level_system import LevelSystem
@@ -19,6 +20,8 @@ from states import LevelCompleteState
 
 class DummyAssets:
     def __init__(self):
+        if not pygame.font.get_init():
+            pygame.font.init()
         self.font = pygame.font.SysFont('arial', 24)
         self.title_font = pygame.font.SysFont('arial', 48)
         self.hud_font = pygame.font.SysFont('arial', 18)

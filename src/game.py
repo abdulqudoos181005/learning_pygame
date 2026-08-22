@@ -34,6 +34,10 @@ class Game:
         # AssetsLoader handles loading PNG files or generating procedural vector designs
         self.assets = AssetsLoader()
         
+        # Sprint 11 / Pillar C: Audio Director for multi-bus audio, spatial panning, ducking, & voice limiting
+        from audio.director import AudioDirector
+        self.audio = AudioDirector(assets=self.assets, screen_width=self.width)
+        
         # Initialize starting state (MenuState) using the State Design Pattern.
         # This keeps state-specific logic (menu screens, gameplay, high scores) separate.
         self.state = MenuState(self)
@@ -84,6 +88,7 @@ class Game:
             # 3. STATE-SPECIFIC EXECUTION
             # Delegate event handling, physics/updates, and drawing to the active state.
             # This is the power of the State Pattern: game.run() doesn't need to know what screen is active.
+            self.audio.update(dt)
             self.state.handle_events(events)
             self.state.update(dt)
             self.state.draw(self.screen)

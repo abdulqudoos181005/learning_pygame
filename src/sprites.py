@@ -68,8 +68,11 @@ class Player(pg.sprite.Sprite):
             self.shield -= damage
             shield_broke = self.shield <= 0
             self.presentation.trigger_shield_ripple()
-            if shield_broke and hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
-                self.game.assets.get_sound("shield_down").play()
+            if shield_broke:
+                if hasattr(self.game, 'audio') and self.game.audio:
+                    self.game.audio.play_sfx("shield_down", pos_x=self.pos_x)
+                elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                    self.game.assets.get_sound("shield_down").play()
             if self.shield < 0:
                 self.health += self.shield # Apply remaining damage to health
                 self.shield = 0
@@ -87,7 +90,10 @@ class Player(pg.sprite.Sprite):
             self.shield = 0
             self.activate_invincibility(4.0)
             self.presentation.trigger_repair()
-            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.trigger_ducking(duration=0.5, factor=0.35)
+                self.game.audio.play_sfx("player_death", pos_x=self.pos_x)
+            elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                 self.game.assets.get_sound("player_death").play()
             # Reset position
             self.pos_x = float(self.game.width // 2)
@@ -187,7 +193,9 @@ class Player(pg.sprite.Sprite):
             self.shoot_timer = self.shoot_cooldown
             self.recoil_timer = 0.06
             self.muzzle_timer = 0.07
-            if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_sfx("laser", pos_x=self.pos_x, pitch_variance=True)
+            elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                 self.game.assets.get_sound("laser").play()
             
             # Retrieve laser groups from active state
@@ -233,7 +241,9 @@ class Player(pg.sprite.Sprite):
             return
         
         self.missile_count -= 1
-        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_sfx("laser_pew", pos_x=self.pos_x)
+        elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("laser_pew").play()
         missile = Missile(self.game, self.rect.centerx, self.rect.top, state.enemies)
         state.missiles.add(missile)
@@ -386,7 +396,9 @@ class Enemy(pg.sprite.Sprite):
         if not hasattr(state, 'enemy_lasers'):
             return
             
-        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_sfx("laser_pew", pos_x=self.rect.centerx, volume_mult=0.65)
+        elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("laser_pew").play()
 
         if self.type == "stinger":
@@ -467,7 +479,9 @@ class Boss(pg.sprite.Sprite):
         if not hasattr(state, 'enemy_lasers'):
             return
 
-        if hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_sfx("laser_pew", pos_x=self.rect.centerx, volume_mult=0.8)
+        elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("laser_pew").play()
 
         if self.attack_phase == 1:

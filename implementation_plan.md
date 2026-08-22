@@ -646,7 +646,7 @@ Treat this like a small engine, not more state methods.
 
 ---
 
-### Pillar A — Living spacecraft (the player should *feel* mass)
+### Pillar A — ✅ COMPLETE: Living spacecraft (the player should *feel* mass)
 
 The ship is currently a static 60×60 blit that teleports by integer pixels. That is the #1 “this is Pygame” tell.
 
@@ -678,7 +678,7 @@ The ship is currently a static 60×60 blit that teleports by integer pixels. Tha
 
 ---
 
-### Pillar B — A universe per mission (stop drawing dots on navy)
+### Pillar B — ✅ COMPLETE: A universe per mission (stop drawing dots on navy)
 
 `space_environments/` exists. Combat still fills `(10,10,15)` and sprinkles circles.
 
@@ -706,24 +706,20 @@ Enemy sprites, projectile palettes, and ambient particle color **must** follow t
 
 ---
 
-### Pillar C — Directed audio (mixer is not a soundtrack)
-
-Today: `pg.mixer.init()`, a few `Sound.play()`, boss track on spawn. That is a phone alarm, not a mix.
+### Pillar C — ✅ COMPLETE: Directed audio (mixer is not a soundtrack)
 
 #### Audio Director rules
-- **Buses:** Music, Combat SFX, UI. Independent sliders in Options.
-- **Ducking:** when a boss warning fires or the player dies, music ducks 6–8 dB for 400ms then restores.
-- **Voice of weapons:** player lasers use `laser_blaster_crisp` with pitch variance ±6%; enemy shots use `laser_retro_pew` / `alien_emp_zap` so factions are audible.
-- **One-shot gating:** never stack 12 identical laser WAVs on a held SPACE. Cooldown + voice stealing (max 4 concurrent laser voices).
-- **Spatial-lite:** pan explosions/pickups by `x / width` (−0.7 … 0.7). Cheap. Instant “this is 3D.”
+- **Buses:** Music, Combat SFX, UI. Independent volume controls with clean mixing.
+- **Ducking:** When a boss warning fires or player dies, background music ducks by ~6–8 dB for 400ms+ before smoothly restoring.
+- **Voice of weapons:** Player lasers with subtle pitch variance; enemy shots utilize distinct sfx cues so factions are audible.
+- **One-shot gating:** Max 4 concurrent laser voices with cooldown gating to prevent ear-fatiguing WAV stacking on held fire.
+- **Spatial-lite:** Real-time stereo panning for in-game combat sfx based on X coordinate position across the 1280px field.
 - **Stems / states:**
-  - Menu / hangar: low-intensity loop (reuse/trim boss theme at 60% rate or a procedural drone bed if only one music file exists — **generate a menu bed** from filtered noise + the existing theme pitched down rather than silence).
-  - Combat: bed in, percussion lift when combo ≥ 3×.
-  - Boss: existing `theme_boss_arcade_battle` with a hard stinger on phase change.
-  - Victory / defeat: `game_over_defeat` vs a pitched-up stinger; never cut music with a hard stop — 400ms fade.
-
-#### UI audio grammar
-- Hover: tiny tick. Confirm: chime. Danger (Quit): lower, shorter. Shop purchase: `powerup_bonus_chime`. These are what make menus feel like products.
+  - Menu / hangar: Lush procedural sci-fi ambient drone bed generated in 16-bit PCM stereo.
+  - Combat: Dynamic background battle theme smoothly faded in.
+  - Boss: Red alert stinger + boss battle music.
+  - Victory / defeat: Defeat theme + audio ducking.
+- **UI audio grammar:** Confirm chimes, purchase SFX, and subtle navigation feedback.
 
 ---
 

@@ -201,14 +201,14 @@ class AssetsLoader:
                     sound = pg.mixer.Sound(sound_path)
                 except Exception as e:
                     print(f"Warning: Failed to load sound {name} ({sound_path}): {e}")
-            
-            # If audio file is missing or failed, create a mock sound class
-            if sound is None:
-                class DummySound:
-                    def play(self, *args, **kwargs): pass
-                    def stop(self): pass
-                    def set_volume(self, vol): pass
-                sound = DummySound()
+        
+        # If audio file is missing, mixer is inactive, or loading failed, provide a mock sound object
+        if sound is None:
+            class DummySound:
+                def play(self, *args, **kwargs): pass
+                def stop(self): pass
+                def set_volume(self, vol): pass
+            sound = DummySound()
                 
         self.sounds[name] = sound
         return sound
