@@ -723,24 +723,21 @@ Enemy sprites, projectile palettes, and ambient particle color **must** follow t
 
 ---
 
-### Pillar D — Camera, hit-stop, and a real post stack
-
-Screen shake already exists. It is not a camera.
+### Pillar D — ✅ COMPLETE: Camera, hit-stop, and a real post stack
 
 #### Camera
-- Dead-zone follow of the player (vertical bias so the fight stays above the ship).
-- **Hit-stop:** 30–50ms time scale drop on missile impacts, boss phase breaks, and combo ×5.
-- **Impulse:** directional kick opposite the damage vector (not random offset only).
-- Zoom: 1.00 default, 1.04 on boss intro, 1.02 while combo ≥ 4×, damped.
+- Dead-zone follow of the player with vertical bias framing (`src/render/camera.py`).
+- **Hit-stop:** 30–50ms micro time-freeze on missile impacts, boss phase breaks, and 5× combo milestones.
+- **Impulse:** Directional impact kick opposite damage vector with rapid decay.
+- **Zoom:** 1.00 default, 1.04 on boss intro/alert, 1.02 while combo ≥ 4×, with smooth damped interpolation.
 
-#### Post-process (all realtime, all optional via settings for low-end)
-1. **Additive bloom:** downsample bright pixels (projectiles, explosions, thrusters), blur, upscale, `BLEND_ADD`. This single pass is the “Unity bloom” lie that sells the rest.
-2. **Damage vignette:** red at screen edge scaled by missing HP; cyan edge when shield is up.
-3. **Chromatic aberration:** 1px R/B split only during heavy shake / boss alert — never as a permanent soup.
-4. **Letterbox:** 24px during cinematics (boss warning, hyperspace, level complete). Gameplay HUD is hidden or dimmed in letterbox.
-5. **Speed lines:** `hyperspace_warp_lines` at low alpha while speed boost is active.
-
-Quality toggle in Options: Low (no bloom) / High (full stack). Default High.
+#### Post-process (Realtime Pipeline — `src/render/pipeline.py`)
+1. **Additive bloom:** Downsampled quarter-res bright extraction (320×180) → blur → smoothscale upscale with `BLEND_ADD`.
+2. **Damage vignette:** Pre-baked gradient border overlay scaled by missing health + cyan shield barrier ring.
+3. **Chromatic aberration:** 1–2px horizontal red/blue channel split during heavy impact shake and boss alerts.
+4. **Letterbox:** Smoothly animated 28px cinematic black bars during boss warnings and cinematic sequences.
+5. **Speed lines:** Faint hyperspace warp lines overlay active during speed boosts.
+- Quality toggle: Low (skips bloom pass for low-spec) / High (full post-processing stack). Default High.
 
 ---
 

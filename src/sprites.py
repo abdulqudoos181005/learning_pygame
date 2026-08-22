@@ -435,12 +435,21 @@ class Boss(pg.sprite.Sprite):
         self.attack_phase = 1
 
     def get_hit(self, damage):
+        old_phase = self.attack_phase
         self.health -= damage
         # Phase transitions (proportional to max health)
         if self.health <= self.max_health * 0.3:
             self.attack_phase = 3
         elif self.health <= self.max_health * 0.7:
             self.attack_phase = 2
+            
+        if self.attack_phase != old_phase and hasattr(self.game, 'state'):
+            state = self.game.state
+            if hasattr(state, 'camera'):
+                state.camera.trigger_hit_stop(0.05)
+                state.camera.add_shake(0.35, 7.0)
+            elif hasattr(state, 'trigger_shake'):
+                state.trigger_shake(0.35, 7)
             
         if self.health <= 0:
             self.kill()

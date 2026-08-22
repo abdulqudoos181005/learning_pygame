@@ -7,6 +7,8 @@ from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
 from level_system import LevelSystem
 from world.environment import SpaceEnvironment
+from render.camera import Camera
+from render.pipeline import RenderPipeline
 
 
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
@@ -584,11 +586,10 @@ class PlayState(State):
         self.COMBO_CAP        = 5.0    # maximum multiplier
         self.COMBO_STEP       = 0.5    # multiplier increment per kill
         
-        # SCREEN SHAKE DOUBLE BUFFERING:
-        # We draw the entire game onto a separate offscreen Surface (self.canvas).
-        # When blitting this canvas onto the physical window surface (screen), we offset
-        # it by random X and Y coordinates (shake_offset) to simulate impact tremors.
-        self.canvas = pg.Surface((self.game.width, self.game.height))
+        # Sprint 11 / Pillar D: Dynamic 2D Camera & Unified Render Pipeline
+        self.camera = Camera(self.game.width, self.game.height)
+        self.pipeline = RenderPipeline(self.game.width, self.game.height, assets=self.game.assets)
+        self.canvas = self.pipeline.world_canvas
         
         # Pygame sprite groups for clean collision and batch updating
         self.all_sprites   = pg.sprite.Group()
@@ -658,6 +659,13 @@ class PlayState(State):
         """Enables screen shake with a specific duration and strength."""
         self.shake_duration  = duration
         self.shake_magnitude = magnitude
+        if hasattr(self, 'camera'):
+            self.camera.add_shake(duration, magnitude)
+
+    def trigger_impulse(self, dir_x, dir_y, magnitude=12.0):
+        """Adds a directional impact impulse to the camera."""
+        if hasattr(self, 'camera'):
+            self.camera.add_impulse(dir_x, dir_y, magnitude)
 
     def trigger_damage_flash(self, amount=0.25):
         """Adds a brief red hit flash across the screen."""
@@ -691,14 +699,27 @@ class PlayState(State):
                     self.game.change_state(PauseState(self.game, self))
 
     def update(self, dt):
-        # 1. SCREEN SHAKE MATH
-        if self.shake_duration > 0:
-            self.shake_duration -= dt
-            # Choose a random offset within [-magnitude, magnitude] range
-            self.shake_offset.x = random.randint(-self.shake_magnitude, self.shake_magnitude)
-            self.shake_offset.y = random.randint(-self.shake_magnitude, self.shake_magnitude)
+        # Sprint 11 / Pillar D: Dynamic Camera, hit-stop, & render pipeline update
+        if hasattr(self, 'camera'):
+            if self.boss_warning_timer > 0 or self.level_sys.is_boss_wave:
+                self.camera.set_target_zoom(1.04)
+            elif self.combo_count >= 4:
+                self.camera.set_target_zoom(1.02)
+            else:
+                self.camera.set_target_zoom(1.00)
+            self.camera.update(dt, target_x=self.player.pos_x, target_y=self.player.pos_y)
+            self.shake_offset = self.camera.shake_offset
         else:
-            self.shake_offset.update(0, 0)
+            # Fallback screen shake math
+            if self.shake_duration > 0:
+                self.shake_duration -= dt
+                self.shake_offset.x = random.randint(-self.shake_magnitude, self.shake_magnitude)
+                self.shake_offset.y = random.randint(-self.shake_magnitude, self.shake_magnitude)
+            else:
+                self.shake_offset.update(0, 0)
+
+        if hasattr(self, 'pipeline'):
+            self.pipeline.update(dt)
 
         self.damage_flash = max(0.0, self.damage_flash - dt)
         if self.level_sys.is_boss_wave:
@@ -881,6 +902,8 @@ class PlayState(State):
                         self.game.audio.play_sfx("zap", pos_x=asteroid.rect.centerx, volume_mult=0.9)
                     elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                         self.game.assets.get_sound("zap").play()
+                    if hasattr(self, 'camera'):
+                        self.camera.trigger_hit_stop(0.04)
                     self._break_asteroid(asteroid)
                     self.score += asteroid.max_health // 2
 
@@ -888,6 +911,7 @@ class PlayState(State):
         player_asteroid_hits = pg.sprite.spritecollide(self.player, self.asteroids, True)
         for asteroid in player_asteroid_hits:
             self.trigger_shake(0.22, 8)
+            self.trigger_impulse(0, 8.0, magnitude=14.0)
             spawn_explosion(self.particles, asteroid.rect.centerx, asteroid.rect.centery, color=(150, 110, 80), count=18)
             if self.player.get_hit(asteroid.damage):
                 spawn_explosion(self.particles, self.player.rect.centerx, self.player.rect.centery, color=(0, 200, 255), count=40)
@@ -934,6 +958,8 @@ class PlayState(State):
                 spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery,
                                 color=(255, 150, 0), count=40, speed_range=(80, 300))
                 self.trigger_shake(0.4, 8)
+                if hasattr(self, 'camera'):
+                    self.camera.trigger_hit_stop(0.045)
                 
                 if enemy.get_hit(Missile.DAMAGE):
                     points = int(enemy.score_value * self.combo_multiplier)
@@ -953,6 +979,7 @@ class PlayState(State):
         for laser in player_laser_hits:
             # Spawn red sparks shooting downwards from impact
             spawn_sparks(self.particles, laser.rect.centerx, laser.rect.bottom, (0, 1), color=(255, 50, 50), count=8)
+            self.trigger_impulse(0, 6.0, magnitude=10.0)
             
             # Apply damage to player. Returns True if player loses a life
             if self.player.get_hit(15):
@@ -981,6 +1008,9 @@ class PlayState(State):
         for enemy in crash_hits:
             spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 80, 0), count=30)
             self.score += enemy.score_value // 2
+            self.trigger_impulse(0, 10.0, magnitude=16.0)
+            if hasattr(self, 'camera'):
+                self.camera.trigger_hit_stop(0.035)
             
             if self.player.get_hit(30):
                 self._reset_combo()  # Sprint 7: break combo on crash
@@ -1042,7 +1072,10 @@ class PlayState(State):
         self.combo_timer = self.COMBO_WINDOW  # restart the decay window
         if self.combo_count > 1:
             # Increase multiplier (step each kill, cap at COMBO_CAP)
+            old_mult = self.combo_multiplier
             self.combo_multiplier = min(self.COMBO_CAP, 1.0 + (self.combo_count - 1) * self.COMBO_STEP)
+            if self.combo_multiplier >= self.COMBO_CAP and old_mult < self.COMBO_CAP and hasattr(self, 'camera'):
+                self.camera.trigger_hit_stop(0.04)
             combo_label = f"×{self.combo_multiplier:.1f} COMBO!"
             self.spawn_floating_text(x, y - 20, combo_label, color=(255, 230, 50), life=1.0, drift_y=-40)
         else:
@@ -1112,8 +1145,23 @@ class PlayState(State):
         # Render User Interface HUD (Health, Shields, Level/Wave text, timers)
         self._draw_hud()
 
-        # Final blit onto physical display screen, applying coordinates offset by screen shake values
-        screen.blit(self.canvas, self.shake_offset)
+        # Sprint 11 / Pillar D: Unified Render Pipeline Presentation
+        if hasattr(self, 'pipeline'):
+            health_ratio = self.player.health / max(1, self.player.max_health)
+            shield_active = self.player.shield > 0
+            speed_boost = self.player.speed_boost_timer > 0
+            is_boss_alert = self.boss_warning_timer > 0
+            self.pipeline.present(
+                screen,
+                camera=getattr(self, 'camera', None),
+                health_ratio=health_ratio,
+                shield_active=shield_active,
+                speed_boost=speed_boost,
+                is_boss_alert=is_boss_alert,
+            )
+        else:
+            # Final blit onto physical display screen, applying coordinates offset by screen shake values
+            screen.blit(self.canvas, self.shake_offset)
 
     def _draw_hud(self):
         """Renders information layout on screen (Score, Level/Wave, Health/Shield Meters, Powerup Timers)."""
@@ -1438,6 +1486,8 @@ class BossWarningState(State):
         self.play_state = play_state
         self.timer = 0.0
         self.done = False
+        if hasattr(self.play_state, 'pipeline'):
+            self.play_state.pipeline.set_letterbox(True)
         if hasattr(self.game, 'audio') and self.game.audio:
             self.game.audio.trigger_ducking(duration=self.DURATION, factor=0.3)
             self.game.audio.play_music("boss", fade_ms=400)
@@ -1451,6 +1501,8 @@ class BossWarningState(State):
         self.timer += dt
         if self.timer >= self.DURATION and not self.done:
             self.done = True
+            if hasattr(self.play_state, 'pipeline'):
+                self.play_state.pipeline.set_letterbox(False)
             # Unfreeze the play state — boss wave will proceed normally
             self.game.change_state(self.play_state)
 
