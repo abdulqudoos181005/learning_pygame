@@ -171,7 +171,10 @@ class AudioDirector:
         if not self.mixer_available:
             return
 
-        if self.current_music_track == track_name:
+        # For non-menu tracks, skip if already playing the same track.
+        # For 'menu', always restart the ambient bed so it plays correctly
+        # when returning from combat (avoiding the silent-menu bug).
+        if track_name != "menu" and self.current_music_track == track_name:
             return
 
         self.current_music_track = track_name
@@ -184,6 +187,11 @@ class AudioDirector:
                 except Exception:
                     pass
                 if self.procedural_menu_sound:
+                    # Stop any existing playback first to restart cleanly
+                    try:
+                        self.procedural_menu_sound.stop()
+                    except Exception:
+                        pass
                     self.procedural_menu_sound.set_volume(self.music_volume * 0.55)
                     self.procedural_menu_channel = self.procedural_menu_sound.play(loops=-1, fade_ms=fade_ms)
                 return

@@ -53,7 +53,10 @@ class Particle(pg.sprite.Sprite):
     """
     An individual visual effect particle that moves, fades out, and shrinks over its lifespan.
     
-    Uses pg.SRCALPHA to enable smooth alpha transparency fading.
+    Performance note: The circle is drawn ONCE at spawn time. Each frame only
+    calls set_alpha() on the pre-baked surface — avoiding a full Surface re-alloc
+    and draw.circle call every update tick, which matters greatly during boss fights
+    with 200+ simultaneous particles.
     """
     def __init__(self, x, y, color, size, speed_x, speed_y, lifetime):
         super().__init__()
@@ -68,26 +71,15 @@ class Particle(pg.sprite.Sprite):
         self.max_life = lifetime # Total lifetime in seconds
         self.life = lifetime     # Remaining lifetime in seconds
         
-        # Create a surface with an alpha channel (transparent background)
+        # Create a surface with an alpha channel (transparent background).
+        # The circle is drawn once here — update() only tweaks alpha, never redraws.
         self.image = pg.Surface((size * 2, size * 2), pg.SRCALPHA)
+        base_color = color[:3]
+        pg.draw.circle(self.image, (*base_color, 255), (size, size), size)
         self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
-        self._update_image()
-
-    def _update_image(self):
-        """Clears the particle surface and redraws it with current size and transparency level."""
-        self.image.fill((0, 0, 0, 0)) # Clear with transparency
-        
-        # Calculate alpha (0 to 255) based on remaining life ratio
-        alpha = int((self.life / self.max_life) * 255)
-        
-        # Extract RGB values (ignore original alpha if any)
-        base_color = self.color[:3]
-        
-        # Draw a filled circle in the center of the particle's local surface
-        pg.draw.circle(self.image, (*base_color, alpha), (self.size, self.size), self.size)
 
     def update(self, dt):
-        """Updates particle lifespan, position, size, and redraws it."""
+        """Updates particle lifespan, position, and fade alpha.\n        Does NOT redraw the surface — only calls set_alpha for performance."""
         self.life -= dt
         # Remove particle when its life runs out
         if self.life <= 0:
@@ -99,9 +91,9 @@ class Particle(pg.sprite.Sprite):
         self.y += self.speed_y * dt
         self.rect.center = (int(self.x), int(self.y))
         
-        # Linearly shrink the particle as it ages
-        self.size = max(1, int(self.start_size * (self.life / self.max_life)))
-        self._update_image()
+        # Fade out by adjusting alpha — much cheaper than fill+draw.circle every frame
+        alpha = max(0, int((self.life / self.max_life) * 255))
+        self.image.set_alpha(alpha)
 
 
 def spawn_explosion(group, x, y, color=(255, 100, 0), count=25, speed_range=(50, 200), size_range=(2, 6)):

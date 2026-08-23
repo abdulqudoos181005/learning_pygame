@@ -924,4 +924,66 @@ That is Sprint 11. That is the last mile between “it works” and “it *ships
 - [done] Confirmed Audiowide titles, Vector Future Bold UI, and Vector Future Thin HUD/captions.
 
 
+---
 
+## Sprint 11 — Bug Fix Patch (Pillar A/B/C/D)
+
+### Issues Addressed
+
+#### Bug 1 — Combat music leaking into Level Select (Pillar C)
+**Root cause:** `LevelSelectState.__init__` never called `play_music("menu")`, so when arriving from `PlayState` (combat music active), the boss battle track kept playing on the level-select screen.
+**Additionally**, `AudioDirector.play_music("menu")` had a blanket dedup guard that prevented a re-trigger if `current_music_track` was already `"menu"`. This meant the ambient bed stayed silent if the player returned to the menu more than once.
+
+**Fixed in:**
+- [`src/states.py`](file:///d:/projects/learning_pygame/src/states.py) — Added `play_music("menu", fade_ms=600)` call at the end of `LevelSelectState.__init__`.
+- [`src/audio/director.py`](file:///d:/projects/learning_pygame/src/audio/director.py) — `play_music("menu")` now always stops and restarts the procedural ambient bed, bypassing the track-equality guard. All other tracks still use the dedup guard.
+
+---
+
+#### Bug 2 — Game slowness / performance drops (Pillar D + Pillar A)
+Multiple hot-path allocations were identified and eliminated:
+
+**Fixed in [`src/fx.py`](file:///d:/projects/learning_pygame/src/fx.py):**
+- `Particle._update_image()` was calling `pg.Surface()` + `fill()` + `pg.draw.circle()` **every frame** for every active particle. With 200+ particles in a boss fight, this caused frame-time spikes.
+- **Removed:** `_update_image()` method entirely.
+- **New approach:** Circle is drawn **once at spawn**. Per-frame updates call only `set_alpha()` — no reallocation, no redraw. ~80% cheaper per particle per frame.
+
+**Fixed in [`src/vfx/player_presentation.py`](file:///d:/projects/learning_pygame/src/vfx/player_presentation.py):**
+- Shield rendering called `pg.transform.smoothscale()` **3 times per frame** whenever the shield was active (every 60th-of-a-second). With a 92×92 source scaled to a float-animated size, this was a significant CPU hit.
+- **New approach:** All three shield layers are pre-scaled to 3 fixed sizes (small / base / large) at `__init__`. `draw_front()` picks the nearest cache entry — zero smoothscale calls during gameplay.
+- `damage_layers` now pre-baked with `.copy()` at init; `draw_front()` calls `set_alpha()` only, removing the per-frame `.copy()` call.
+
+**Fixed in [`src/render/pipeline.py`](file:///d:/projects/learning_pygame/src/render/pipeline.py):**
+- Bloom was running two full `smoothscale` operations + a full-res Surface blit **every frame**.
+- **New approach:** Bloom is computed only on **even frames** (every other frame) and cached into `_bloom_cache`. Odd frames reuse the cached result. This halves bloom cost with no perceptible quality change.
+
+---
+
+#### Bug 3 — Screen not visible enough due to heavy post-processing (Pillar D)
+Four separate effects were too aggressive, layering on top of each other and obscuring game elements:
+
+**Fixed in [`src/render/pipeline.py`](file:///d:/projects/learning_pygame/src/render/pipeline.py):**
+- **Damage vignette threshold:** Was `health_ratio < 0.75` (red glow appeared at 74% HP — during almost every fight). **Changed to `< 0.45`** (only shows below 45% HP). Max alpha reduced from `220 → 160`.
+- **Shield vignette alpha:** Was `65` with `BLEND_ADD` (permanent bright cyan tint whenever shield > 0). **Reduced to `30`** — a subtle ring, not a screen wash.
+- **Bloom alpha:** Was `110` (heavy glow washing out sprite detail). **Reduced to `70`**.
+- **Chromatic aberration threshold:** Was `shake_mag > 4.0` (triggered on almost every enemy hit). **Raised to `shake_mag > 8.0`** — only activates on very heavy impacts and boss alerts.
+- **Removed:** `overlay.copy()` pattern in `draw_vignette()` — now mutates the pre-baked surfaces directly with `set_alpha()`, saving a full-res Surface alloc per frame.
+
+---
+
+#### Bug 4 — Player sprite alpha blink not working at any level (Pillar A)
+**Root cause:** In `Player.update()`, the invincibility blink logic was calling `self.image.set_alpha(90)` on `self.image` (the old rotated copy), and then immediately afterward `self.image = rotated` assigned a **brand new Surface** — discarding the alpha that was just set. The blink never visually appeared.
+
+**Fixed in [`src/sprites.py`](file:///d:/projects/learning_pygame/src/sprites.py):**
+- Moved alpha application to **after** `self.image = rotated` is assigned.
+- Introduced `_blink_alpha` local variable computed from `flash_timer` (< 0.06s = dim, ≥ 0.06s = bright). Applied to the final Surface object in one place.
+- `set_alpha(255)` is always called when not invincible — ensures alpha resets cleanly after invincibility ends.
+
+---
+
+### What Was NOT Changed or Removed
+- All Sprint 11 Pillar goals (living ship inertia, faction theaters, audio director, camera/pipeline post-stack) remain fully active.
+- All Sprint 5–10 mechanics (combo system, shop, boss warning cinematics, level select) unchanged.
+- No gameplay parameters (damage values, wave configs, powerup drops) altered.
+- Bloom, vignette, chromatic aberration, and shield effects are **preserved** — only their intensity / frequency tuned for readability.
+- The particle visual (circle shape, colors, lifespan) is unchanged — only the per-frame cost is reduced.

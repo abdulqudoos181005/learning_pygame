@@ -119,15 +119,19 @@ class Player(pg.sprite.Sprite):
         self.hit_stutter = max(0.0, self.hit_stutter - dt)
         self.muzzle_timer = max(0.0, self.muzzle_timer - dt)
         self.presentation.update(dt)
+
+        # Track invincibility blink state — alpha is applied AFTER self.image is set below
+        _blink_alpha = None
         if self.invincible_timer > 0:
             self.invincible_timer -= dt
             self.flash_timer += dt
             if self.flash_timer >= 0.12:
                 self.flash_timer = 0.0
-                self.image.set_alpha(90 if self.image.get_alpha() > 120 else 255)
+            # Alternate between dim (90) and full (255) every blink half-cycle
+            _blink_alpha = 90 if (self.flash_timer < 0.06) else 255
         else:
-            self.image.set_alpha(255)
-            
+            self.flash_timer = 0.0
+
         self.shield_active = self.shield > 0
 
         # Movement keys feed an inertial body; the rect remains the collision view.
@@ -173,7 +177,12 @@ class Player(pg.sprite.Sprite):
                 rotated,
                 (rotated.get_width(), max(1, rotated.get_height() - 2)),
             )
+        # Assign image FIRST, then apply blink alpha so it lands on the correct Surface object.
         self.image = rotated
+        if _blink_alpha is not None:
+            self.image.set_alpha(_blink_alpha)
+        else:
+            self.image.set_alpha(255)
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
         # Fire regular weapons

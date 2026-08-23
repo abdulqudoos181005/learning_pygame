@@ -419,6 +419,11 @@ class LevelSelectState(State):
         self.back_hovered = False
         self._build_buttons()
 
+        # Bug fix: Switch back to menu ambient bed whenever level select is entered.
+        # This covers the case where we arrive from PlayState (combat music still active).
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_music("menu", fade_ms=600)
+
     def _build_buttons(self):
         self.buttons = []
         highest_unlocked = self.progress.get("highest_unlocked", 1)

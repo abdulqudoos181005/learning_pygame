@@ -28,6 +28,9 @@ class RenderPipeline:
         self.bloom_w = width // 4
         self.bloom_h = height // 4
         self.bloom_buffer = pg.Surface((self.bloom_w, self.bloom_h))
+        # Cached upscaled bloom result — reused on alternating frames for performance
+        self._bloom_cache = pg.Surface((width, height))
+        self._bloom_frame = 0  # frame counter for every-other-frame bloom update
 
         # Pre-baked vignette surfaces for high FPS rendering
         self._vignette_red = self._create_vignette((220, 20, 20))
@@ -69,16 +72,24 @@ class RenderPipeline:
             self.letterbox_height = self.letterbox_target
 
     def apply_bloom(self, source_surf):
-        """Performs fast additive bloom by quarter-res downsampling and upscaling."""
+        """Performs fast additive bloom by quarter-res downsampling and upscaling.
+
+        Performance: Only recomputes the bloom texture every other frame using a
+        cached surface. This halves the smoothscale cost with imperceptible quality loss.
+        """
         if not self.bloom_enabled or self.quality == "low":
             return
 
-        # 1. Downscale onto quarter-res buffer (acts as a low-pass filter)
-        pg.transform.smoothscale(source_surf, (self.bloom_w, self.bloom_h), self.bloom_buffer)
-        # 2. Upscale back smoothly and additively blend
-        upscaled_bloom = pg.transform.smoothscale(self.bloom_buffer, (self.width, self.height))
-        upscaled_bloom.set_alpha(110)
-        source_surf.blit(upscaled_bloom, (0, 0), special_flags=pg.BLEND_ADD)
+        self._bloom_frame += 1
+        if self._bloom_frame % 2 == 0:
+            # 1. Downscale onto quarter-res buffer (acts as a low-pass filter)
+            pg.transform.smoothscale(source_surf, (self.bloom_w, self.bloom_h), self.bloom_buffer)
+            # 2. Upscale back into cached bloom surface
+            pg.transform.smoothscale(self.bloom_buffer, (self.width, self.height), self._bloom_cache)
+
+        # Blend cached bloom — alpha reduced from 110→70 to avoid washing out game detail
+        self._bloom_cache.set_alpha(70)
+        source_surf.blit(self._bloom_cache, (0, 0), special_flags=pg.BLEND_ADD)
 
     def apply_chromatic_aberration(self, source_surf, target_surf, intensity=2):
         """Applies a subtle 1-2px red/blue horizontal split during heavy impact frames."""
@@ -100,24 +111,30 @@ class RenderPipeline:
         target_surf.blit(b_surf, (intensity, 0), special_flags=pg.BLEND_ADD)
 
     def draw_vignette(self, target_surf, health_ratio=1.0, shield_active=False):
-        """Draws reactive damage edge glow and shield ring."""
+        """Draws reactive damage edge glow and shield ring.
+
+        Visibility tuning:
+        - Red vignette only appears below 45% HP (was 75%) — avoids obscuring
+          the playfield during normal combat.
+        - Max alpha reduced from 220→160 for a less aggressive tint.
+        - Shield vignette alpha reduced from 65→30 so it's a subtle hint, not a tint.
+        """
         if not self.vignette_enabled:
             return
 
-        # Red damage vignette when hull is damaged
-        if health_ratio < 0.75:
-            damage_factor = (0.75 - max(0.0, health_ratio)) / 0.75
-            alpha = int(220 * (damage_factor ** 1.3))
+        # Red damage vignette — only show when hull is seriously damaged (< 45% HP)
+        VIGNETTE_THRESHOLD = 0.45
+        if health_ratio < VIGNETTE_THRESHOLD:
+            damage_factor = (VIGNETTE_THRESHOLD - max(0.0, health_ratio)) / VIGNETTE_THRESHOLD
+            alpha = int(160 * (damage_factor ** 1.3))
             if alpha > 5:
-                overlay = self._vignette_red.copy()
-                overlay.set_alpha(alpha)
-                target_surf.blit(overlay, (0, 0))
+                self._vignette_red.set_alpha(alpha)
+                target_surf.blit(self._vignette_red, (0, 0))
 
-        # Cyan shield edge pulse when active
+        # Cyan shield edge pulse when active — subtle hint, not a screen tint
         if shield_active:
-            overlay = self._vignette_cyan.copy()
-            overlay.set_alpha(65)
-            target_surf.blit(overlay, (0, 0), special_flags=pg.BLEND_ADD)
+            self._vignette_cyan.set_alpha(30)
+            target_surf.blit(self._vignette_cyan, (0, 0), special_flags=pg.BLEND_ADD)
 
     def draw_letterbox(self, target_surf):
         """Renders top and bottom cinematic black bars."""
@@ -165,10 +182,12 @@ class RenderPipeline:
             transformed = self.world_canvas
 
         # 3. Chromatic aberration during heavy shake or boss alert
+        # Threshold raised from 4.0→8.0: only triggers on very heavy impacts,
+        # not on routine laser hits — avoids constant RGB split during normal combat.
         chroma_intensity = 0
         if is_boss_alert:
             chroma_intensity = 2
-        elif shake_mag > 4.0:
+        elif shake_mag > 8.0:
             chroma_intensity = 1
 
         if chroma_intensity > 0:
