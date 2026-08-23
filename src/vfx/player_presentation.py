@@ -83,22 +83,12 @@ class PlayerPresentation:
             surface.blit(flash, flash.get_rect(midbottom=(center[0], self.player.rect.top + 5)), special_flags=pg.BLEND_ADD)
 
         if self.player.shield > 0:
-            pulse = 1.0 + 0.04 * math.sin(self.time * 7.0)
-            ripple_add = (self.shield_ripple / 0.22) * 0.18 if self.shield_ripple > 0 else 0.0
-            total_scale = pulse + ripple_add
-
-            for idx, (small, base, large) in enumerate(self.shield_cache):
-                # Select cached layer closest to the desired pulse scale
-                if total_scale < 0.98 + idx * 0.01:
-                    layer = small
-                elif total_scale > 1.04 + idx * 0.01:
-                    layer = large
-                else:
-                    layer = base
-                # Apply per-layer alpha — no copy() needed, set_alpha is in-place
-                alpha = max(30, 110 - idx * 22)
-                layer.set_alpha(alpha)
-                surface.blit(layer, layer.get_rect(center=center), special_flags=pg.BLEND_ADD)
+            # Single clean, soft shield bubble (outer layer only) without heavy stacking
+            if len(self.shield_cache) > 0:
+                _, base, _ = self.shield_cache[0]
+                shield = base.copy()
+                shield.set_alpha(65)
+                surface.blit(shield, shield.get_rect(center=center))
 
         damage = self._damage_layer()
         if damage is not None:

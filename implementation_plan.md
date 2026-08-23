@@ -959,15 +959,20 @@ Multiple hot-path allocations were identified and eliminated:
 
 ---
 
-#### Bug 3 — Screen not visible enough due to heavy post-processing (Pillar D)
-Four separate effects were too aggressive, layering on top of each other and obscuring game elements:
+---
+
+#### Bug 3 — Screen not visible enough due to heavy post-processing & powerup visuals (Pillar D + A)
+Extra additive effects and high brightness layers were washed out and obscuring gameplay:
 
 **Fixed in [`src/render/pipeline.py`](file:///d:/projects/learning_pygame/src/render/pipeline.py):**
-- **Damage vignette threshold:** Was `health_ratio < 0.75` (red glow appeared at 74% HP — during almost every fight). **Changed to `< 0.45`** (only shows below 45% HP). Max alpha reduced from `220 → 160`.
-- **Shield vignette alpha:** Was `65` with `BLEND_ADD` (permanent bright cyan tint whenever shield > 0). **Reduced to `30`** — a subtle ring, not a screen wash.
-- **Bloom alpha:** Was `110` (heavy glow washing out sprite detail). **Reduced to `70`**.
-- **Chromatic aberration threshold:** Was `shake_mag > 4.0` (triggered on almost every enemy hit). **Raised to `shake_mag > 8.0`** — only activates on very heavy impacts and boss alerts.
-- **Removed:** `overlay.copy()` pattern in `draw_vignette()` — now mutates the pre-baked surfaces directly with `set_alpha()`, saving a full-res Surface alloc per frame.
+- **Bloom pass:** Completely disabled (`bloom_enabled = False`) to eliminate washed-out whites and excessive additive brightness across the entire screen.
+- **Speed lines overlay:** Removed during speed boosts to prevent extra screen clutter and glare.
+- **Shield vignette:** Completely removed from screen-space presentation to avoid whole-screen cyan tints.
+- **Damage vignette:** Threshold tuned to `< 45% HP` with reduced alpha (160) so it only signals critical danger.
+- **Chromatic aberration threshold:** Raised to `shake_mag > 8.0` for heavy boss/impact moments only.
+
+**Fixed in [`src/vfx/player_presentation.py`](file:///d:/projects/learning_pygame/src/vfx/player_presentation.py):**
+- **Shield power-up effect:** Replaced the 3-layer additive pulsing shield stacking with a single clean, subtle soft bubble overlay (`alpha = 65`, non-additive), ensuring the player ship and surroundings remain crystal clear.
 
 ---
 
@@ -982,8 +987,8 @@ Four separate effects were too aggressive, layering on top of each other and obs
 ---
 
 ### What Was NOT Changed or Removed
-- All Sprint 11 Pillar goals (living ship inertia, faction theaters, audio director, camera/pipeline post-stack) remain fully active.
-- All Sprint 5–10 mechanics (combo system, shop, boss warning cinematics, level select) unchanged.
-- No gameplay parameters (damage values, wave configs, powerup drops) altered.
-- Bloom, vignette, chromatic aberration, and shield effects are **preserved** — only their intensity / frequency tuned for readability.
-- The particle visual (circle shape, colors, lifespan) is unchanged — only the per-frame cost is reduced.
+- All Sprint 11 Pillar goals (living ship inertia & banking, faction theaters & nebulae, audio director & spatial audio, camera follow & hit-stop) remain fully active.
+- All Sprint 5–10 mechanics (combo multiplier system, upgrade shop, boss warning cinematics, level select) unchanged.
+- No gameplay parameters (damage values, speed boosts, wave configs, powerup drops) altered.
+- The particle visual (circle shape, colors, lifespan) is preserved with high-performance alpha fades.
+

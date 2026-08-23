@@ -43,7 +43,7 @@ class RenderPipeline:
 
         # Quality settings
         self.quality = "high"  # "high" or "low"
-        self.bloom_enabled = True
+        self.bloom_enabled = False  # Disabled: was washing out game visuals
         self.vignette_enabled = True
         self.chromatic_enabled = True
         self.letterbox_enabled = True
@@ -111,13 +111,10 @@ class RenderPipeline:
         target_surf.blit(b_surf, (intensity, 0), special_flags=pg.BLEND_ADD)
 
     def draw_vignette(self, target_surf, health_ratio=1.0, shield_active=False):
-        """Draws reactive damage edge glow and shield ring.
+        """Draws reactive damage edge glow only when hull is critically damaged.
 
-        Visibility tuning:
-        - Red vignette only appears below 45% HP (was 75%) — avoids obscuring
-          the playfield during normal combat.
-        - Max alpha reduced from 220→160 for a less aggressive tint.
-        - Shield vignette alpha reduced from 65→30 so it's a subtle hint, not a tint.
+        Shield vignette removed (was adding a permanent cyan screen tint).
+        Red damage vignette threshold: < 45% HP only.
         """
         if not self.vignette_enabled:
             return
@@ -130,11 +127,6 @@ class RenderPipeline:
             if alpha > 5:
                 self._vignette_red.set_alpha(alpha)
                 target_surf.blit(self._vignette_red, (0, 0))
-
-        # Cyan shield edge pulse when active — subtle hint, not a screen tint
-        if shield_active:
-            self._vignette_cyan.set_alpha(30)
-            target_surf.blit(self._vignette_cyan, (0, 0), special_flags=pg.BLEND_ADD)
 
     def draw_letterbox(self, target_surf):
         """Renders top and bottom cinematic black bars."""
@@ -156,12 +148,12 @@ class RenderPipeline:
         """
         Final composite pass: Takes the world canvas, applies post-processing,
         transforms by camera zoom & shake offset, and blits to the destination screen.
-        """
-        # 1. Additive bloom on world canvas
-        if self.bloom_enabled and self.quality != "low":
-            self.apply_bloom(self.world_canvas)
 
-        # 2. Camera zoom & offset
+        Bloom and speed-lines overlay removed for clarity. Shield vignette removed.
+        Remaining passes: camera zoom/shake, chromatic aberration on heavy hits,
+        damage vignette (< 45% HP only), cinematic letterbox.
+        """
+        # 1. Camera zoom & offset
         offset_x, offset_y = (0, 0)
         zoom = 1.0
         shake_mag = 0.0
@@ -181,9 +173,7 @@ class RenderPipeline:
         else:
             transformed = self.world_canvas
 
-        # 3. Chromatic aberration during heavy shake or boss alert
-        # Threshold raised from 4.0→8.0: only triggers on very heavy impacts,
-        # not on routine laser hits — avoids constant RGB split during normal combat.
+        # 2. Chromatic aberration during heavy shake or boss alert only
         chroma_intensity = 0
         if is_boss_alert:
             chroma_intensity = 2
@@ -197,12 +187,8 @@ class RenderPipeline:
         else:
             screen.blit(transformed, (int(offset_x), int(offset_y)))
 
-        # 4. Damage / shield vignette
-        self.draw_vignette(screen, health_ratio=health_ratio, shield_active=shield_active)
+        # 3. Damage vignette (< 45% HP only — no shield vignette)
+        self.draw_vignette(screen, health_ratio=health_ratio, shield_active=False)
 
-        # 5. Speed lines if speed boost
-        if speed_boost:
-            self.draw_speed_lines(screen, alpha=85)
-
-        # 6. Letterbox on top of everything
+        # 4. Letterbox on top of everything
         self.draw_letterbox(screen)
