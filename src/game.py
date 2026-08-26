@@ -19,8 +19,12 @@ class Game:
     def __init__(self):
         # Initialize all imported pygame modules (display, image, font, etc.)
         pg.init()
-        # Initialize the mixer module for sound loading and playback
-        pg.mixer.init()
+        # Initialize the mixer module for sound loading and playback (graceful fallback if audio device unavailable)
+        try:
+            pg.mixer.init()
+        except Exception as e:
+            print(f"[Warning] Audio device initialization failed: {e}. Running in silent mode.")
+
         
         # Screen dimensions
         self.width = 1280
