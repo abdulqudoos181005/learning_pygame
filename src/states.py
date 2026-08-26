@@ -654,9 +654,9 @@ class PlayState(State):
         self.shake_magnitude = 0
         self.shake_offset    = pg.Vector2(0, 0)
 
-        # Sprint 11: Switch soundtrack to combat bed
+        # Play the combat track once at level start (no loop — silence during gameplay after intro)
         if hasattr(self.game, 'audio') and self.game.audio:
-            self.game.audio.play_music("combat", fade_ms=600)
+            self.game.audio.play_music("combat", loop=False, fade_ms=600)
 
     def trigger_shake(self, duration, magnitude):
         """Enables screen shake with a specific duration and strength."""
@@ -1493,7 +1493,8 @@ class BossWarningState(State):
             self.play_state.pipeline.set_letterbox(True)
         if hasattr(self.game, 'audio') and self.game.audio:
             self.game.audio.trigger_ducking(duration=self.DURATION, factor=0.3)
-            self.game.audio.play_music("boss", fade_ms=400)
+            # Boss warning: stop music and let silence build tension (no looping soundtrack)
+            self.game.audio.stop_music(fade_ms=400)
         elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("boss_music").play()
 
