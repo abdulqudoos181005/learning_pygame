@@ -20,56 +20,75 @@ class SaveSystem:
         self.progress_filepath = os.path.join(project_root, progress_filename)
         self.settings_filepath = os.path.join(project_root, settings_filename)
 
-    def load_loadout(self):
-        """Loads ship loadout configuration (hull, color) from settings.json."""
-        default_loadout = {
+    def load_settings(self):
+        """Loads complete user settings dict (volumes, visuals, controls, accessibility, loadout)."""
+        defaults = {
+            "music_volume": 0.7,
+            "sfx_volume": 0.8,
+            "ui_volume": 0.8,
+            "shake_intensity": 1.0,
+            "bloom": False,
+            "hitmarkers": True,
+            "fullscreen": False,
+            "screen_flash": True,
             "hull": "interceptor",
-            "color": "blue"
+            "color": "blue",
+            "keybinds": {
+                "up": "w",
+                "down": "s",
+                "left": "a",
+                "right": "d",
+                "fire": "space",
+                "missile": "m",
+                "pause": "p"
+            }
         }
         if not os.path.exists(self.settings_filepath):
-            return default_loadout
+            return defaults
 
         try:
             with open(self.settings_filepath, 'r') as f:
                 data = json.load(f)
                 if isinstance(data, dict):
-                    hull = str(data.get("hull", "interceptor")).lower()
-                    color = str(data.get("color", "blue")).lower()
-                    if hull not in ("interceptor", "cruiser", "vanguard"):
-                        hull = "interceptor"
-                    if color not in ("blue", "green", "orange", "red"):
-                        color = "blue"
-                    return {"hull": hull, "color": color}
+                    # Merge loaded keys over defaults
+                    for k, v in data.items():
+                        if k == "keybinds" and isinstance(v, dict):
+                            defaults["keybinds"].update(v)
+                        else:
+                            defaults[k] = v
+                    return defaults
         except Exception as e:
             print(f"Warning: Failed to load settings JSON: {e}")
 
-        return default_loadout
+        return defaults
 
-    def save_loadout(self, hull, color):
-        """Saves chosen ship hull and color to settings.json."""
-        hull = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
-        color = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
-
-        settings = {}
-        if os.path.exists(self.settings_filepath):
-            try:
-                with open(self.settings_filepath, 'r') as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        settings = data
-            except Exception:
-                settings = {}
-
-        settings["hull"] = hull
-        settings["color"] = color
-
+    def save_settings(self, settings_dict):
+        """Saves entire settings dictionary to settings.json."""
         try:
             with open(self.settings_filepath, 'w') as f:
-                json.dump(settings, f, indent=4)
+                json.dump(settings_dict, f, indent=4)
             return True
         except Exception as e:
             print(f"Warning: Failed to save settings JSON: {e}")
             return False
+
+    def load_loadout(self):
+        """Loads ship loadout configuration (hull, color) from settings.json."""
+        settings = self.load_settings()
+        hull = str(settings.get("hull", "interceptor")).lower()
+        color = str(settings.get("color", "blue")).lower()
+        if hull not in ("interceptor", "cruiser", "vanguard"):
+            hull = "interceptor"
+        if color not in ("blue", "green", "orange", "red"):
+            color = "blue"
+        return {"hull": hull, "color": color}
+
+    def save_loadout(self, hull, color):
+        """Saves chosen ship hull and color to settings.json."""
+        settings = self.load_settings()
+        settings["hull"] = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
+        settings["color"] = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
+        return self.save_settings(settings)
         
     def load_scores(self):
         """

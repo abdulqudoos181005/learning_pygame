@@ -52,10 +52,11 @@ class Sprint9UITest(unittest.TestCase):
         menu = MenuState(self.game)
         self.assertIn("Play Game", menu.options)
         self.assertIn("Hangar / Ships", menu.options)
+        self.assertIn("Options", menu.options)
         self.assertIn("Flight Manual", menu.options)
         self.assertIn("High Scores", menu.options)
         self.assertIn("Quit", menu.options)
-        self.assertEqual(len(menu.buttons), 5)
+        self.assertEqual(len(menu.buttons), 6)
 
         # Select Flight Manual
         flight_idx = menu.options.index("Flight Manual")

@@ -96,55 +96,94 @@ class Particle(pg.sprite.Sprite):
         self.image.set_alpha(alpha)
 
 
+class ParticlePool:
+    """
+    Sprint 11 / Pillar J — Particle Pool for zero-allocation performance.
+
+    Pre-allocates 384 reusable Particle objects to prevent garbage collector spikes
+    during intense combat or multi-kill chain explosions.
+    """
+
+    def __init__(self, capacity=384):
+        self.capacity = capacity
+        self.pool = [Particle(0, 0, (255, 255, 255), 3, 0, 0, 0.5) for _ in range(capacity)]
+        for p in self.pool:
+            p.kill()
+
+    def get(self, x, y, color, size, speed_x, speed_y, lifetime):
+        """Retrieves an idle particle from the pool or re-uses the oldest if full."""
+        particle = None
+        for p in self.pool:
+            if not p.alive() and p.life <= 0:
+                particle = p
+                break
+
+        if particle is None:
+            particle = self.pool[0]  # recycle oldest
+
+        particle.x = float(x)
+        particle.y = float(y)
+        particle.color = color
+        particle.start_size = size
+        particle.size = size
+        particle.speed_x = speed_x
+        particle.speed_y = speed_y
+        particle.max_life = lifetime
+        particle.life = lifetime
+
+        # Re-render base surface for new size/color
+        particle.image = pg.Surface((size * 2, size * 2), pg.SRCALPHA)
+        base_color = color[:3]
+        pg.draw.circle(particle.image, (*base_color, 255), (size, size), size)
+        particle.rect = particle.image.get_rect(center=(int(x), int(y)))
+        return particle
+
+
+_GLOBAL_PARTICLE_POOL = None
+
+def get_particle_pool():
+    global _GLOBAL_PARTICLE_POOL
+    if _GLOBAL_PARTICLE_POOL is None:
+        _GLOBAL_PARTICLE_POOL = ParticlePool(capacity=384)
+    return _GLOBAL_PARTICLE_POOL
+
+
 def spawn_explosion(group, x, y, color=(255, 100, 0), count=25, speed_range=(50, 200), size_range=(2, 6)):
     """
-    Spawns multiple particles in a radial direction to create an explosion effect.
-    
-    This is triggered when enemies are destroyed or when the player takes heavy damage.
+    Spawns multiple particles in a radial direction to create an explosion effect using the pool.
     """
+    pool = get_particle_pool()
     for _ in range(count):
-        # Choose a random angle (0 to 360 degrees in radians)
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(*speed_range)
-        
-        # Resolve speed into X and Y component velocities using trigonometry
         speed_x = speed * math.cos(angle)
         speed_y = speed * math.sin(angle)
-        
         size = random.randint(*size_range)
         lifetime = random.uniform(0.3, 0.8)
-        
-        # Create and add particle to the sprite group
-        particle = Particle(x, y, color, size, speed_x, speed_y, lifetime)
+
+        particle = pool.get(x, y, color, size, speed_x, speed_y, lifetime)
         group.add(particle)
 
 
 def spawn_sparks(group, x, y, direction_vector, color=(0, 255, 255), count=8):
     """
-    Spawns particles oriented along a specific direction vector to simulate impact sparks.
-    
-    Used when a laser hits a target to create a satisfying impact flare.
+    Spawns particles oriented along a specific direction vector to simulate impact sparks using the pool.
     """
     dir_x, dir_y = direction_vector
-    
-    # Normalize the direction vector to get a unit vector of length 1.0
     mag = math.sqrt(dir_x**2 + dir_y**2)
     if mag > 0:
         dir_x /= mag
         dir_y /= mag
-        
+
+    pool = get_particle_pool()
     for _ in range(count):
-        # Calculate impact angle and add a slight random spread (up to ~30 degrees or 0.5 rad)
         spread_angle = math.atan2(dir_y, dir_x) + random.uniform(-0.5, 0.5)
-        
-        # Speed of sparks
         speed = random.uniform(80, 250)
         speed_x = speed * math.cos(spread_angle)
         speed_y = speed * math.sin(spread_angle)
-        
         size = random.randint(1, 3)
         lifetime = random.uniform(0.2, 0.5)
-        
-        particle = Particle(x, y, color, size, speed_x, speed_y, lifetime)
+
+        particle = pool.get(x, y, color, size, speed_x, speed_y, lifetime)
         group.add(particle)
 

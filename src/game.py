@@ -42,18 +42,41 @@ class Game:
         from audio.director import AudioDirector
         self.audio = AudioDirector(assets=self.assets, screen_width=self.width)
         
-        # Save System & persistent player loadout (hull, color)
+        # Save System & persistent player loadout & settings
         from save_system import SaveSystem
         self.save_system = SaveSystem()
+        self.settings = self.save_system.load_settings()
         self.loadout = self.save_system.load_loadout()
 
+        # Apply saved bus volumes
+        self.audio.set_bus_volumes(
+            music=self.settings.get("music_volume", 0.7),
+            sfx=self.settings.get("sfx_volume", 0.8),
+            ui=self.settings.get("ui_volume", 0.8)
+        )
+
+        # Sprint 11 / Pillar G: Device-Agnostic Input Map
+        from input_map import InputMap
+        self.input = InputMap(keybinds=self.settings.get("keybinds", None))
+
+        # Sprint 11 / Pillar F: Tactical Software Reticle
+        from ui.cursor import SoftwareCursor
+        self.cursor = SoftwareCursor(self.assets, self.width, self.height)
+
+        # Sprint 11 / Pillar H: Cinematic State Transitions
+        from render.transition import StateTransition
+        self.transition = StateTransition(self.width, self.height)
+
+        # Fullscreen state
+        self.fullscreen = bool(self.settings.get("fullscreen", False))
+        if self.fullscreen:
+            self.screen = pg.display.set_mode((self.width, self.height), pg.FULLSCREEN)
+
         # Initialize starting state (MenuState) using the State Design Pattern.
-        # This keeps state-specific logic (menu screens, gameplay, high scores) separate.
         self.state = MenuState(self)
         self.running = True
 
         # Sprint 7: persistent upgrade bonuses purchased from the between-level shop.
-        # These accumulate across the whole run and are applied each time a PlayState is created.
         self.upgrades = {
             "max_health_bonus": 0,    # flat HP added to player max health
             "max_shield_bonus": 0,    # flat shield added to player max shield
@@ -63,14 +86,22 @@ class Game:
             "shield_regen_rate": 0.0, # shield points regenerated per second (passive)
         }
 
-    def change_state(self, new_state):
+    def toggle_fullscreen(self):
+        """Toggles fullscreen display mode without destroying assets."""
+        self.fullscreen = not self.fullscreen
+        self.settings["fullscreen"] = self.fullscreen
+        self.save_system.save_settings(self.settings)
+        flags = pg.FULLSCREEN if self.fullscreen else 0
+        self.screen = pg.display.set_mode((self.width, self.height), flags)
+
+    def change_state(self, new_state, transition_type=None, duration=0.22):
         """
-        Switches the active game state.
-        
-        This makes switching from the Main Menu -> Play Screen -> Game Over Screen
-        as simple as instantiating a new State object.
+        Switches the active game state, optionally routing through a cinematic transition.
         """
-        self.state = new_state
+        if transition_type:
+            self.transition.start(new_state, transition_type=transition_type, duration=duration)
+        else:
+            self.state = new_state
 
     def run(self):
         """
@@ -78,33 +109,33 @@ class Game:
         Each iteration represents one frame.
         """
         while self.running:
-            # 1. FRAME RATE & DELTA TIME
-            # self.clock.tick(60) limits the game to 60 frames per second.
-            # It returns the milliseconds elapsed since the last tick.
-            # We divide by 1000.0 to convert it to seconds (dt = delta time in seconds).
-            # min(..., 0.1) clamps dt to a maximum of 0.1 seconds to prevent huge movement jumps
-            # (which would let sprites clip through boundaries) if the game lags.
             dt = min(self.clock.tick(60) / 1000.0, 0.1)
             
-            # 2. EVENT POLLING
-            # Collect and process all system events (key presses, window close, etc.)
+            # 1. EVENT POLLING
             events = pg.event.get()
             for event in events:
-                # If the user clicks the 'X' close button of the window, exit the loop
                 if event.type == pg.QUIT:
                     self.running = False
-            
-            # 3. STATE-SPECIFIC EXECUTION
-            # Delegate event handling, physics/updates, and drawing to the active state.
-            # This is the power of the State Pattern: game.run() doesn't need to know what screen is active.
+                elif event.type == pg.KEYDOWN and event.key == pg.K_F11:
+                    self.toggle_fullscreen()
+
+            # 2. SUBSYSTEM UPDATES
+            self.input.update(dt, events=events)
             self.audio.update(dt)
-            self.state.handle_events(events)
+            self.cursor.update(dt, lerp_aim=isinstance(self.state, PlayState) if 'PlayState' in globals() else False)
+            self.transition.update(dt, self)
+
+            # 3. STATE-SPECIFIC EXECUTION
+            if not self.transition.active or self.transition.halfway_executed:
+                self.state.handle_events(events)
             self.state.update(dt)
             self.state.draw(self.screen)
+
+            # 4. TRANSITION & TACTICAL CURSOR OVERLAY
+            self.transition.draw(self.screen)
+            self.cursor.draw(self.screen)
             
-            # 4. REFRESH SCREEN
-            # pg.display.flip() updates the full display Surface to the screen.
-            # It displays the final drawn buffer, preventing screen tearing.
+            # 5. REFRESH SCREEN
             pg.display.flip()
             
         # Clean up pygame resources and exit the process safely

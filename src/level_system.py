@@ -12,17 +12,9 @@ Boss encounters are placed at Level 5 and Level 10 (the final boss).
 # Level Configuration Table
 # ---------------------------------------------------------------------------
 
-def _make_wave(count, types, weights, hp_mult=1.0, spd_mult=1.0, spawn_delay=1.5):
+def _make_wave(count, types, weights, hp_mult=1.0, spd_mult=1.0, spawn_delay=1.5, formation="v_shape"):
     """
     Helper to build a single wave configuration dict.
-    
-    Args:
-        count       (int)   : Number of enemies to spawn this wave.
-        types       (list)  : Enemy type strings (e.g. ['scout', 'stinger']).
-        weights     (list)  : Relative probability weights matching `types`.
-        hp_mult     (float) : Health point multiplier applied to each enemy this wave.
-        spd_mult    (float) : Speed multiplier applied to each enemy this wave.
-        spawn_delay (float) : Seconds between successive enemy spawns.
     """
     return {
         "count": count,
@@ -31,6 +23,7 @@ def _make_wave(count, types, weights, hp_mult=1.0, spd_mult=1.0, spawn_delay=1.5
         "hp_mult": hp_mult,
         "spd_mult": spd_mult,
         "spawn_delay": spawn_delay,
+        "formation": formation,
         "boss": False,
     }
 

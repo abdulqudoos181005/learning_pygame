@@ -168,18 +168,22 @@ class Player(pg.sprite.Sprite):
 
         self.shield_active = self.shield > 0
 
-        # Movement keys feed an inertial body; the rect remains the collision view.
-        keys = pg.key.get_pressed()
+        # Sprint 11 / Pillar G: Action Graph Input Routing
+        # The player sprite reads action states from game.input instead of raw keycodes directly
+        inp = getattr(self.game, 'input', None)
         dx, dy = 0.0, 0.0
         
-        if keys[pg.K_w] or keys[pg.K_UP]:
-            dy -= 1
-        if keys[pg.K_s] or keys[pg.K_DOWN]:
-            dy += 1
-        if keys[pg.K_a] or keys[pg.K_LEFT]:
-            dx -= 1
-        if keys[pg.K_d] or keys[pg.K_RIGHT]:
-            dx += 1
+        if inp:
+            if inp.is_held("up"): dy -= 1
+            if inp.is_held("down"): dy += 1
+            if inp.is_held("left"): dx -= 1
+            if inp.is_held("right"): dx += 1
+        else:
+            keys = pg.key.get_pressed()
+            if keys[pg.K_w] or keys[pg.K_UP]: dy -= 1
+            if keys[pg.K_s] or keys[pg.K_DOWN]: dy += 1
+            if keys[pg.K_a] or keys[pg.K_LEFT]: dx -= 1
+            if keys[pg.K_d] or keys[pg.K_RIGHT]: dx += 1
 
         # Normalize diagonal movement vector
         if dx != 0 or dy != 0:
@@ -219,16 +223,18 @@ class Player(pg.sprite.Sprite):
             self.image.set_alpha(255)
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
-        # Fire regular weapons
-        if keys[pg.K_SPACE] or keys[pg.K_j]:
+        # Fire regular weapons via InputMap action
+        is_firing = inp.is_held("fire") if inp else (pg.key.get_pressed()[pg.K_SPACE] or pg.key.get_pressed()[pg.K_j])
+        if is_firing:
             self.shoot()
         
-        # Launch missile (M key) — homing special weapon
-        if keys[pg.K_m] and self.missile_count > 0 and self.missile_cooldown <= 0:
+        # Launch missile via InputMap action
+        is_missile = inp.is_held("missile") if inp else pg.key.get_pressed()[pg.K_m]
+        if is_missile and self.missile_count > 0 and self.missile_cooldown <= 0:
             self.missile_hold_timer += dt
             self._launch_missile()
             self.missile_cooldown = 0.5  # Half-second cooldown between launches
-        elif not keys[pg.K_m]:
+        elif not is_missile:
             self.missile_hold_timer = 0.0
 
     def shoot(self):
@@ -402,6 +408,16 @@ class Enemy(pg.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
         self.shoot_timer = random.uniform(0.5, self.shoot_delay)
         
+        # Sprint 11 / Pillar I: Telegraph & Elite Enemy attributes
+        self.is_elite = (self.type == "cruiser" and random.random() < 0.25)
+        if self.is_elite:
+            self.max_health = int(self.max_health * 1.5)
+            self.health = self.max_health
+            self.score_value = int(self.score_value * 2)
+            self.nameplate = "SHADOW ELITE"
+
+        self.telegraph_timer = 0.0
+
         # Sine wave horizontal movement configuration (only for certain enemies)
         self.wave_timer = random.uniform(0, 2 * math.pi)
         
@@ -413,6 +429,9 @@ class Enemy(pg.sprite.Sprite):
         return False
 
     def update(self, dt):
+        if self.telegraph_timer > 0:
+            self.telegraph_timer -= dt
+
         # Y movement (always move down)
         self.rect.y += self.speed_y * dt
         
@@ -436,9 +455,11 @@ class Enemy(pg.sprite.Sprite):
         if self.rect.top > self.game.height:
             self.kill()
             
-        # Shooting logic
+        # Shooting logic with 400ms telegraph warning
         if self.shoot_timer > 0:
             self.shoot_timer -= dt
+            if self.shoot_timer <= 0.4 and self.telegraph_timer <= 0 and self.type == "cruiser":
+                self.telegraph_timer = 0.4
         else:
             self.shoot()
             self.shoot_timer = self.shoot_delay
@@ -482,9 +503,16 @@ class Boss(pg.sprite.Sprite):
         self.target_y = 120
         self.score_value = int(5000 * hp_mult)
         
+        # Sprint 11 / Pillar F: Named boss identity
+        self.boss_title = "CRIMSON MOTHERSHIP" if not boss_key or "crimson" in str(boss_key) else "SOLAR CITADEL DREADNOUGHT"
+        
         # Attack intervals
         self.shoot_timer = 2.0
         self.attack_phase = 1
+
+    @property
+    def boss_name(self):
+        return f"{self.boss_title} — PHASE {self.attack_phase}"
 
     def get_hit(self, damage):
         old_phase = self.attack_phase

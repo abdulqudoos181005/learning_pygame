@@ -1,4 +1,21 @@
 {
-    "hull": "cruiser",
-    "color": "red"
+    "music_volume": 0.4357142857142857,
+    "sfx_volume": 0.4357142857142857,
+    "ui_volume": 0.5392857142857143,
+    "shake_intensity": 1.0,
+    "bloom": true,
+    "hitmarkers": true,
+    "fullscreen": false,
+    "screen_flash": true,
+    "hull": "interceptor",
+    "color": "orange",
+    "keybinds": {
+        "up": "w",
+        "down": "s",
+        "left": "a",
+        "right": "d",
+        "fire": "space",
+        "missile": "m",
+        "pause": "p"
+    }
 }
