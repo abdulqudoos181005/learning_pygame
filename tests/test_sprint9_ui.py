@@ -51,19 +51,22 @@ class Sprint9UITest(unittest.TestCase):
     def test_menu_state_has_flight_manual_and_quit(self):
         menu = MenuState(self.game)
         self.assertIn("Play Game", menu.options)
+        self.assertIn("Hangar / Ships", menu.options)
         self.assertIn("Flight Manual", menu.options)
         self.assertIn("High Scores", menu.options)
         self.assertIn("Quit", menu.options)
-        self.assertEqual(len(menu.buttons), 4)
+        self.assertEqual(len(menu.buttons), 5)
 
         # Select Flight Manual
-        menu.selected_index = 1
-        menu._select_option(1)
+        flight_idx = menu.options.index("Flight Manual")
+        menu.selected_index = flight_idx
+        menu._select_option(flight_idx)
         self.assertIsInstance(self.game.target, InstructionsState)
 
         # Select Quit
-        menu.selected_index = 3
-        menu._select_option(3)
+        quit_idx = menu.options.index("Quit")
+        menu.selected_index = quit_idx
+        menu._select_option(quit_idx)
         self.assertFalse(self.game.is_running)
 
     def test_instructions_state_cards_and_navigation(self):

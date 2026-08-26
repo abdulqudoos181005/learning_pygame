@@ -42,6 +42,11 @@ class Game:
         from audio.director import AudioDirector
         self.audio = AudioDirector(assets=self.assets, screen_width=self.width)
         
+        # Save System & persistent player loadout (hull, color)
+        from save_system import SaveSystem
+        self.save_system = SaveSystem()
+        self.loadout = self.save_system.load_loadout()
+
         # Initialize starting state (MenuState) using the State Design Pattern.
         # This keeps state-specific logic (menu screens, gameplay, high scores) separate.
         self.state = MenuState(self)

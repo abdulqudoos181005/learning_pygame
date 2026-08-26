@@ -8,7 +8,7 @@ class SaveSystem:
     This system reads, writes, and maintains a sorted leaderboard, capping it
     to the top 10 scores to keep things clean.
     """
-    def __init__(self, filename="high_scores.json", progress_filename="level_progress.json"):
+    def __init__(self, filename="high_scores.json", progress_filename="level_progress.json", settings_filename="settings.json"):
         # We calculate the absolute path to the high_scores.json file.
         # os.path.abspath(__file__) gets the full path of 'save_system.py'.
         # os.path.dirname(...) climbs up one folder to 'src/'.
@@ -18,6 +18,58 @@ class SaveSystem:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.filepath = os.path.join(project_root, filename)
         self.progress_filepath = os.path.join(project_root, progress_filename)
+        self.settings_filepath = os.path.join(project_root, settings_filename)
+
+    def load_loadout(self):
+        """Loads ship loadout configuration (hull, color) from settings.json."""
+        default_loadout = {
+            "hull": "interceptor",
+            "color": "blue"
+        }
+        if not os.path.exists(self.settings_filepath):
+            return default_loadout
+
+        try:
+            with open(self.settings_filepath, 'r') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    hull = str(data.get("hull", "interceptor")).lower()
+                    color = str(data.get("color", "blue")).lower()
+                    if hull not in ("interceptor", "cruiser", "vanguard"):
+                        hull = "interceptor"
+                    if color not in ("blue", "green", "orange", "red"):
+                        color = "blue"
+                    return {"hull": hull, "color": color}
+        except Exception as e:
+            print(f"Warning: Failed to load settings JSON: {e}")
+
+        return default_loadout
+
+    def save_loadout(self, hull, color):
+        """Saves chosen ship hull and color to settings.json."""
+        hull = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
+        color = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
+
+        settings = {}
+        if os.path.exists(self.settings_filepath):
+            try:
+                with open(self.settings_filepath, 'r') as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        settings = data
+            except Exception:
+                settings = {}
+
+        settings["hull"] = hull
+        settings["color"] = color
+
+        try:
+            with open(self.settings_filepath, 'w') as f:
+                json.dump(settings, f, indent=4)
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to save settings JSON: {e}")
+            return False
         
     def load_scores(self):
         """

@@ -9,14 +9,52 @@ class Player(pg.sprite.Sprite):
     def __init__(self, game, x, y):
         super().__init__()
         self.game = game
-        self.base_image = self.game.assets.get_image("player", 60, 60)
+
+        # Load ship class & color identity from game loadout
+        loadout = getattr(self.game, 'loadout', {"hull": "interceptor", "color": "blue"})
+        self.hull_type = loadout.get("hull", "interceptor").lower()
+        self.color_name = loadout.get("color", "blue").lower()
+
+        # Hull identity presets (Interceptor: balanced, Cruiser: heavy/tanky/wide, Vanguard: fast/stealth/missile)
+        hull_asset_keys = {
+            "interceptor": f"player_fleet/interceptor_strike_{self.color_name}",
+            "cruiser": f"player_fleet/heavy_cruiser_assault_{self.color_name}",
+            "vanguard": f"player_fleet/stealth_vanguard_bomber_{self.color_name}",
+        }
+        self.sprite_key = hull_asset_keys.get(self.hull_type, f"player_fleet/interceptor_strike_{self.color_name}")
+        self.base_image = self.game.assets.get_image(self.sprite_key, 60, 60)
         self.image = self.base_image.copy()
         self.rect = self.image.get_rect(center=(x, y))
         self.pos_x = float(x)
         self.pos_y = float(y)
         self.velocity = pg.Vector2(0, 0)
-        self.max_speed = 400.0
-        self.acceleration = 1800.0
+
+        # Baseline stats by Hull Class
+        if self.hull_type == "cruiser":
+            self.max_speed = 340.0
+            self.acceleration = 1500.0
+            self.max_health = 140
+            self.health = 140
+            self.max_shield = 120
+            self.shoot_cooldown = 0.28
+            self.starting_missiles = 3
+        elif self.hull_type == "vanguard":
+            self.max_speed = 460.0
+            self.acceleration = 2100.0
+            self.max_health = 80
+            self.health = 80
+            self.max_shield = 80
+            self.shoot_cooldown = 0.22
+            self.starting_missiles = 4
+        else:  # interceptor
+            self.max_speed = 400.0
+            self.acceleration = 1800.0
+            self.max_health = 100
+            self.health = 100
+            self.max_shield = 100
+            self.shoot_cooldown = 0.25
+            self.starting_missiles = 3
+
         self.drag = 8.0
         self.bank_angle = 0.0
         self.recoil_timer = 0.0
@@ -24,28 +62,24 @@ class Player(pg.sprite.Sprite):
         self.muzzle_timer = 0.0
         self.missile_hold_timer = 0.0
         self.presentation = PlayerPresentation(self)
-        
+
         # Stats
-        self.speed = 400.0  # Pixels per second
-        self.max_health = 100
-        self.health = 100
-        self.max_shield = 100
+        self.speed = self.max_speed
         self.shield = 0  # Starts at 0, goes up with Shield PowerUp
         self.lives = 3
         self.invincible_timer = 0.0
         self.flash_timer = 0.0
-        
+
         # Weapon properties
-        self.shoot_cooldown = 0.25 # seconds
         self.shoot_timer = 0.0
         self.base_laser_tier = 1
-        
+
         # Power-up states (Sprint 2: triple-shot & speed timers increased to 12s)
         self.triple_shot_timer = 0.0
         self.speed_boost_timer = 0.0
         self.shield_active = False
         self.laser_power_timer = 0.0   # Power laser: next-tier boost for 10s
-        self.missile_count = 0         # Stored homing missiles (activated by M key)
+        self.missile_count = self.starting_missiles  # Stored homing missiles (activated by M key)
         self.missile_cooldown = 0.0    # Prevent spamming missiles
 
     def _effective_laser_tier(self):
@@ -221,13 +255,22 @@ class Player(pg.sprite.Sprite):
                 
             if self.triple_shot_timer > 0:
                 # Fire 3 lasers (center, diagonal-left, diagonal-right)
+                spread_angle = 20 if self.hull_type == "cruiser" else (12 if self.hull_type == "vanguard" else 15)
                 laser_center = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, angle=0,   damage=laser_dmg, img_name=img_name)
-                laser_left   = Laser(self.game, self.rect.left,   self.rect.top, speed_y=-550, angle=-15, damage=laser_dmg, img_name=img_name)
-                laser_right  = Laser(self.game, self.rect.right,  self.rect.top, speed_y=-550, angle=15,  damage=laser_dmg, img_name=img_name)
+                laser_left   = Laser(self.game, self.rect.left,   self.rect.top, speed_y=-550, angle=-spread_angle, damage=laser_dmg, img_name=img_name)
+                laser_right  = Laser(self.game, self.rect.right,  self.rect.top, speed_y=-550, angle=spread_angle,  damage=laser_dmg, img_name=img_name)
                 state.player_lasers.add(laser_center, laser_left, laser_right)
                 state.all_sprites.add(laser_center, laser_left, laser_right)
+            elif self.hull_type == "cruiser":
+                # Heavy Cruiser: Dual-barrel wide volley
+                left_x = self.rect.centerx - 16
+                right_x = self.rect.centerx + 16
+                laser_l = Laser(self.game, left_x, self.rect.top, speed_y=-600, damage=int(laser_dmg * 0.7), img_name=img_name)
+                laser_r = Laser(self.game, right_x, self.rect.top, speed_y=-600, damage=int(laser_dmg * 0.7), img_name=img_name)
+                state.player_lasers.add(laser_l, laser_r)
+                state.all_sprites.add(laser_l, laser_r)
             else:
-                # Single center shot
+                # Single center shot (Interceptor / Vanguard standard)
                 laser = Laser(self.game, self.rect.centerx, self.rect.top, speed_y=-600, damage=laser_dmg, img_name=img_name)
                 state.player_lasers.add(laser)
                 state.all_sprites.add(laser)

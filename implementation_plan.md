@@ -741,20 +741,21 @@ Enemy sprites, projectile palettes, and ambient particle color **must** follow t
 
 ---
 
-### Pillar E — Hangar identity (the missing metagame fantasy)
+### Pillar E — ✅ COMPLETE: Hangar identity (the missing metagame fantasy)
 
-We have three hulls × four colors and a modular shipyard. The player is always a blue interceptor. That is unforgivable given the art.
+We have three hulls × four colors and a modular shipyard. The player is no longer locked to a single blue interceptor.
 
 #### HangarState (between Menu and Level Select, also reachable from Menu)
-- 3D-carousel or 3-bay stage: Interceptor (balanced), Heavy Cruiser (more HP / slower / wider shot), Stealth Vanguard (faster / weaker / tighter hitbox, missiles start +1).
-- Color swatches: Blue / Green / Orange / Red. Recolor is a sprite swap (assets already exist).
-- Live preview: idle thruster loop, slow yaw, hangar sparkles, nameplate in Audiowide.
-- Confirm writes `settings.json` loadout; `PlayState` constructs from that, not a hardcoded alias.
-- Optional cosmetics using `modular_shipyard/` as *backdrop only* this sprint (greebles on the hangar wall) — do not block on a full ship builder.
+- **3-bay stage & 3D-carousel:** Interceptor (balanced), Heavy Cruiser (more HP / slower / dual-barrel wide shot), Stealth Vanguard (faster / agile / tighter hitbox, missiles start +1).
+- **Color swatches:** Blue / Green / Orange / Red with instant swatch selection.
+- **Live preview:** Idle animated thruster loop (single/dual engine based on hull), gentle yaw banking, sparkle bursts, and nameplate in Audiowide Cyber Display.
+- **Persistence:** Confirm writes `settings.json` loadout (`{"hull": ..., "color": ...}`); `PlayState` and `Player` construct dynamically from that.
+- **Shipyard Backdrop:** Modular shipyard structural beams, thruster mounts, and turret greebles decorate the hangar wall.
 
 #### Run identity
-- Level-select tiles tint to the theater color of that mission.
-- HUD life icons use `ui_hud/life_counters/` matching the chosen hull/color — not generic `player` scaled down.
+- **Level-select tiles:** Dynamically tinted to the theater accent colors (`Bio Nursery`, `Crimson Raid`, `First Mothership`, `Cryo Blockade`, `Shadow Corps`, `Solar Throne`) with subtitle theater headers.
+- **HUD life icons:** Uses dedicated `ui_hud/life_counters/hud_life_{hull}_{color}` matching the player's chosen hull & color loadout.
+- **Damage overlays:** `PlayerPresentation` loads matching hull damage layers (`interceptor`, `heavy_cruiser`, `stealth_vanguard`).
 
 ---
 

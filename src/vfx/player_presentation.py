@@ -29,11 +29,18 @@ class PlayerPresentation:
             large = pg.transform.smoothscale(raw, (int(base_w * 1.08), int(base_w * 1.08)))
             self.shield_cache.append((small, base, large))
 
-        # Pre-bake damage overlays; draw_front just set_alpha() on them
+        # Pre-bake damage overlays matching the player's chosen hull class
+        hull_name = getattr(player, 'hull_type', 'interceptor')
+        damage_prefix_map = {
+            "interceptor": "interceptor",
+            "cruiser": "heavy_cruiser",
+            "vanguard": "stealth_vanguard",
+        }
+        prefix = damage_prefix_map.get(hull_name, "interceptor")
         self.damage_layers = (
-            assets.get_image("player_fleet/damage_overlays/interceptor_damage_light",    60, 60).copy(),
-            assets.get_image("player_fleet/damage_overlays/interceptor_damage_moderate", 60, 60).copy(),
-            assets.get_image("player_fleet/damage_overlays/interceptor_damage_critical", 60, 60).copy(),
+            assets.get_image(f"player_fleet/damage_overlays/{prefix}_damage_light",    60, 60).copy(),
+            assets.get_image(f"player_fleet/damage_overlays/{prefix}_damage_moderate", 60, 60).copy(),
+            assets.get_image(f"player_fleet/damage_overlays/{prefix}_damage_critical", 60, 60).copy(),
         )
         self.sparkle = assets.get_image("vfx_effects/sparkles/sparkle_stardust_medium", 44, 44)
         self.time = 0.0
