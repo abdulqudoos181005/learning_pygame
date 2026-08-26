@@ -117,9 +117,8 @@ class MenuState(State):
         self.buttons = []
         self._build_buttons()
         
-        # Sprint 11: Play menu atmospheric bed through AudioDirector
-        if hasattr(self.game, 'audio') and self.game.audio:
-            self.game.audio.play_music("menu", fade_ms=500)
+        pass
+
 
     def _build_buttons(self):
         self.buttons = []
@@ -419,10 +418,9 @@ class LevelSelectState(State):
         self.back_hovered = False
         self._build_buttons()
 
-        # Bug fix: Switch back to menu ambient bed whenever level select is entered.
-        # This covers the case where we arrive from PlayState (combat music still active).
+        # Stop any active soundtrack when entering level select / menus
         if hasattr(self.game, 'audio') and self.game.audio:
-            self.game.audio.play_music("menu", fade_ms=600)
+            self.game.audio.stop_music(fade_ms=400)
 
     def _build_buttons(self):
         self.buttons = []
