@@ -12,16 +12,21 @@ from render.pipeline import RenderPipeline
 from ui.hud import HUD
 
 
+from ui.tooltip import UITooltipManager
+
+
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
                     fill=(22, 34, 56, 220), border=(90, 120, 150, 255),
                     text_color=(240, 240, 240), pulse=0.0, danger=False):
-    """Shared helper for consistent, mouse-friendly arcade buttons.
+    """Shared helper for consistent, mouse-friendly arcade buttons with spring hover scale & cyan glow.
 
-    All future UI elements can reuse this helper so hover and click feedback
-    stays visually uniform without duplicating the button drawing logic.
     Supports danger=True for crimson/ruby red highlight feedback on destructive actions.
     """
-    panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+    draw_rect = rect.inflate(6, 4) if (hovered and not pressed) else rect.copy()
+    if pressed:
+        draw_rect = rect.inflate(-2, -2)
+
+    panel = pg.Surface((draw_rect.width, draw_rect.height), pg.SRCALPHA)
     panel.fill((0, 0, 0, 0))
 
     if danger and (hovered or pressed):
@@ -34,39 +39,49 @@ def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
             text_color = (255, 180, 190)
     elif hovered:
         fill_r, fill_g, fill_b, fill_a = fill
-        border_r, border_g, border_b, border_a = border
-        fill_r = min(255, fill_r + 22)
-        fill_g = min(255, fill_g + 36)
-        fill_b = min(255, fill_b + 42)
-        border_r = min(255, border_r + 20)
-        border_g = min(255, border_g + 40)
-        border_b = min(255, border_b + 60)
+        fill_r = min(255, fill_r + 28)
+        fill_g = min(255, fill_g + 50)
+        fill_b = min(255, fill_b + 60)
+        border = (0, 255, 220, 255)
         fill = (fill_r, fill_g, fill_b, fill_a)
-        border = (border_r, border_g, border_b, border_a)
+        text_color = (120, 255, 255)
     elif pressed:
         fill_r, fill_g, fill_b, fill_a = fill
         border_r, border_g, border_b, border_a = border
         fill_r = max(0, fill_r - 14)
         fill_g = max(0, fill_g - 12)
         fill_b = max(0, fill_b - 18)
-        border_r = min(255, border_r + 24)
-        border_g = min(255, border_g + 40)
-        border_b = min(255, border_b + 50)
+        border = (180, 255, 255, 255)
         fill = (fill_r, fill_g, fill_b, fill_a)
-        border = (border_r, border_g, border_b, border_a)
 
     fill_r, fill_g, fill_b, fill_a = fill
     border_r, border_g, border_b, border_a = border
     pulse_alpha = int(fill_a + (24 * math.sin(pulse) if pulse else 0))
     panel.fill((fill_r, fill_g, fill_b, max(0, min(255, pulse_alpha))))
     pg.draw.rect(panel, (border_r, border_g, border_b, border_a), panel.get_rect(), 2, border_radius=10)
-    screen.blit(panel, rect)
+
+    # Hover glowing accent chevrons on corners
+    if hovered:
+        pw, ph = draw_rect.width, draw_rect.height
+        accent_c = (0, 255, 220, 255) if not danger else (255, 80, 100, 255)
+        pg.draw.line(panel, accent_c, (6, 6), (14, 6), 2)
+        pg.draw.line(panel, accent_c, (6, 6), (6, 14), 2)
+        pg.draw.line(panel, accent_c, (pw - 6, ph - 6), (pw - 14, ph - 6), 2)
+        pg.draw.line(panel, accent_c, (pw - 6, ph - 6), (pw - 6, ph - 14), 2)
+
+    screen.blit(panel, draw_rect)
+
+    # Shadow text
+    shadow_surf = font.render(label, True, (10, 12, 20))
+    shadow_rect = shadow_surf.get_rect(center=(draw_rect.centerx + 1, draw_rect.centery + 1))
+    screen.blit(shadow_surf, shadow_rect)
 
     label_surf = font.render(label, True, text_color)
-    label_rect = label_surf.get_rect(center=rect.center)
+    label_rect = label_surf.get_rect(center=draw_rect.center)
     if pressed:
         label_rect.move_ip(1, 2)
     screen.blit(label_surf, label_rect)
+
 
 
 class State:
@@ -97,7 +112,8 @@ class MenuState(State):
     """
     State representing the Main Menu screen.
     
-    Provides option selection (Play, Flight Manual, High Scores, Quit) and animated starfield.
+    Provides option selection (Play, Hangar, Options, Flight Manual, High Scores, Quit),
+    animated starfield, InputMap integration, and rich UI feedback.
     """
     def __init__(self, game):
         super().__init__(game)
@@ -105,7 +121,7 @@ class MenuState(State):
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=80)
         self.anim_timer = 0.0
         self.click_timer = 0.0
-        self.click_index = None
+        self.pending_action_idx = None
         
         # Render the menu title with a nice neon-cyan color
         self.title_text = self.game.assets.title_font.render("SPACE SHOOTERS", True, (0, 255, 200))
@@ -117,9 +133,20 @@ class MenuState(State):
         self.hovered_index = None
         self.buttons = []
         self._build_buttons()
-        
-        pass
 
+        # Tooltips for options
+        self.tooltips = [
+            ("PLAY CAMPAIGN", "Launch the 10-level campaign with increasing difficulty and mothership bosses."),
+            ("SHIP HANGAR", "Customize ship hull (Interceptor, Cruiser, Vanguard) and laser plasma color loadouts."),
+            ("SYSTEM OPTIONS", "Adjust audio volumes, screen shake, bloom, hitmarkers, and fullscreen toggles."),
+            ("FLIGHT MANUAL", "Review weapon upgrades, power-up types, controls, and enemy fleet intel."),
+            ("HALL OF FAME", "View local top-10 high scores and pilot loadout achievements."),
+            ("QUIT GAME", "Safely exit the Space Shooters application to desktop.")
+        ]
+        
+        # Play menu music bed
+        if hasattr(self.game, "audio"):
+            self.game.audio.play_music("menu")
 
     def _build_buttons(self):
         self.buttons = []
@@ -128,77 +155,94 @@ class MenuState(State):
             self.buttons.append({"label": option, "rect": rect})
 
     def handle_events(self, events):
-        """Navigates options using the keyboard or a mouse click."""
+        """Navigates options using InputMap actions or mouse clicks."""
+        prev_sel = self.selected_index
+
         for event in events:
             if event.type == pg.MOUSEMOTION:
-                self.hovered_index = None
+                mouse_hover = None
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
-                        self.hovered_index = idx
-                        self.selected_index = idx
+                        mouse_hover = idx
                         break
+                if mouse_hover != self.hovered_index:
+                    self.hovered_index = mouse_hover
+                    if mouse_hover is not None:
+                        self.selected_index = mouse_hover
+                        if prev_sel != mouse_hover:
+                            self.game.audio.play_ui_hover()
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
                         self.selected_index = idx
-                        self.click_index = idx
-                        self.click_timer = 0.12
-                        self._select_option(idx)
+                        self.pending_action_idx = idx
+                        self.click_timer = 0.08
+                        self.game.audio.play_ui_click()
                         return
-            elif event.type == pg.KEYDOWN:
-                # W or UP arrow goes up
-                if event.key == pg.K_UP or event.key == pg.K_w:
-                    self.selected_index = (self.selected_index - 1) % len(self.options)
-                    self.hovered_index = None
-                # S or DOWN arrow goes down
-                elif event.key == pg.K_DOWN or event.key == pg.K_s:
-                    self.selected_index = (self.selected_index + 1) % len(self.options)
-                    self.hovered_index = None
-                # ENTER selects the currently highlighted option
-                elif event.key == pg.K_RETURN:
-                    self.click_index = self.selected_index
-                    self.click_timer = 0.12
-                    self._select_option(self.selected_index)
+
+        # Device-agnostic InputMap navigation (Keyboard / Gamepad)
+        if self.game.input.is_pressed("up"):
+            self.selected_index = (self.selected_index - 1) % len(self.options)
+            self.hovered_index = None
+            self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.buttons[self.selected_index]["rect"].centerx, self.buttons[self.selected_index]["rect"].centery)
+
+        elif self.game.input.is_pressed("down"):
+            self.selected_index = (self.selected_index + 1) % len(self.options)
+            self.hovered_index = None
+            self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.buttons[self.selected_index]["rect"].centerx, self.buttons[self.selected_index]["rect"].centery)
+
+        elif self.game.input.is_pressed("confirm"):
+            self.pending_action_idx = self.selected_index
+            self.click_timer = 0.08
+            self.game.audio.play_ui_click()
 
     def _select_option(self, idx=None):
         """Executes the action corresponding to the highlighted option."""
         idx = self.selected_index if idx is None else idx
         if idx == 0:
-            # Transition to level-selection screen
             self.game.change_state(LevelSelectState(self.game))
         elif idx == 1:
-            # Transition to Hangar / Ship Loadout screen
             self.game.change_state(HangarState(self.game, return_state="menu"))
         elif idx == 2:
-            # Transition to Options screen
             self.game.change_state(OptionsState(self.game, return_state=self))
         elif idx == 3:
-            # Transition to dedicated Flight Manual / Mechanics guide
             self.game.change_state(InstructionsState(self.game))
         elif idx == 4:
-            # Transition to high scores leaderboard
             self.game.change_state(HighScoresState(self.game))
         elif idx == 5:
-            # Exit game
             self.game.quit()
 
     def update(self, dt):
-        """Scroll the background stars and animate menu hover pulses."""
+        """Scroll background stars, update click delay timers, and update cursor hover states."""
         self.starfield.update(dt)
         self.anim_timer += dt
+
         if self.click_timer > 0:
             self.click_timer -= dt
-            if self.click_timer <= 0:
-                self.click_index = None
+            if self.click_timer <= 0 and self.pending_action_idx is not None:
+                action_idx = self.pending_action_idx
+                self.pending_action_idx = None
+                self._select_option(action_idx)
+
+        # Update cursor hover state
+        is_any_hovered = (self.hovered_index is not None) or (self.selected_index is not None)
+        self.game.cursor.set_hover_state(is_any_hovered)
+
+        # Update tooltips
+        active_idx = self.hovered_index if self.hovered_index is not None else self.selected_index
+        if 0 <= active_idx < len(self.tooltips):
+            title, body = self.tooltips[active_idx]
+            rect = self.buttons[active_idx]["rect"]
+            self.game.tooltip.set_tooltip(title, body, (rect.right, rect.top))
 
     def draw(self, screen):
-        # Clear screen with a very deep cosmic blue background
         screen.fill((10, 12, 22))
-        
-        # Draw background stars first
         self.starfield.draw(screen)
         
-        # Draw Title with a offset dark green/teal shadow glow effect
+        # Draw Title with neon teal glow
         glow_surf = self.game.assets.title_font.render("SPACE SHOOTERS", True, (0, 100, 80))
         glow_rect = glow_surf.get_rect(center=(self.title_rect.centerx + 2, self.title_rect.centery + 2))
         screen.blit(glow_surf, glow_rect)
@@ -210,55 +254,28 @@ class MenuState(State):
             rect = button["rect"]
             is_sel = (idx == self.selected_index)
             is_hovered = (self.hovered_index == idx)
-            is_pressed = (self.click_index == idx and self.click_timer > 0)
+            is_pressed = (self.pending_action_idx == idx and self.click_timer > 0)
             is_danger = (option.lower() == "quit")
-
-            if is_danger and (is_hovered or is_sel):
-                fill = (65, 15, 25, 245)
-                border = (255, 60, 80, 255)
-                color = (255, 140, 160)
-            elif is_danger:
-                fill = (35, 18, 24, 210)
-                border = (140, 60, 70, 255)
-                color = (220, 170, 180)
-            else:
-                color = (0, 255, 255) if is_sel else (190, 220, 240)
-                if is_hovered or is_sel:
-                    color = (120, 255, 255)
-
-                fill = (22, 34, 56, 220)
-                border = (100, 130, 160, 255)
-                if is_hovered:
-                    fill = (24, 94, 116, 240)
-                    border = (0, 255, 255, 255)
-                if is_sel:
-                    fill = (18, 86, 108, 250)
-                    border = (0, 255, 255, 255)
-                if is_pressed:
-                    fill = (12, 40, 84, 255)
-                    border = (180, 255, 255, 255)
 
             _draw_ui_button(
                 screen,
                 rect,
                 option,
                 self.game.assets.font,
-                hovered=is_hovered,
+                hovered=is_hovered or is_sel,
                 pressed=is_pressed,
-                fill=fill,
-                border=border,
-                text_color=color,
                 pulse=self.anim_timer * 8 + idx,
                 danger=is_danger,
             )
 
 
+
 class InstructionsState(State):
     """
-    Sprint 9 — Dedicated Game Mechanics & Flight Manual.
+    Sprint 9 & 12 — Tabbed Field Manual & Game Mechanics Guide.
     
-    Provides a comprehensive, elegant breakdown of all 6 core combat systems:
-    Flight, Weapons, Missiles, Shields, Combo Multiplier, and Space Hazards.
+    Provides interactive 4-tab breakdown ([CONTROLS], [WEAPONS], [POWER-UPS], [ARMADA / ENEMIES])
+    with live sprite icons, InputMap navigation, and auditory feedback.
     """
     def __init__(self, game):
         super().__init__(game)
@@ -266,92 +283,112 @@ class InstructionsState(State):
         self.anim_timer = 0.0
         self.back_rect = pg.Rect(40, 30, 130, 44)
         self.back_hovered = False
-        
-        self.mechanics = [
-            {
-                "title": "FLIGHT CONTROLS",
-                "tag": "WASD / ARROWS",
-                "color": (0, 230, 255),
-                "desc": "Full omnidirectional vector thrusters with inertial dampening. Boundary barriers keep your fighter securely within combat theater.",
-            },
-            {
-                "title": "PRIMARY PHOTON BLASTER",
-                "tag": "SPACEBAR",
-                "color": (100, 180, 255),
-                "desc": "Rapid concentrated plasma bolts. Upgradeable with Triple Cannons, Faster Reload modules, and heavy piercing laser slugs.",
-            },
-            {
-                "title": "HOMING MISSILES",
-                "tag": "M KEY",
-                "color": (255, 130, 40),
-                "desc": "Lock-on acoustic warheads that seek out the highest-threat enemy on screen, dealing massive area-of-effect explosive damage.",
-            },
-            {
-                "title": "KINETIC SHIELD BARRIER",
-                "tag": "DEFENSE SYSTEM",
-                "color": (0, 255, 200),
-                "desc": "Absorbs 100% of projectile and collision impacts before hull breach. Restored via blue powerup orbs and persistent shop nanites.",
-            },
-            {
-                "title": "COMBO MULTIPLIER",
-                "tag": "SCORE BOOST",
-                "color": (255, 220, 50),
-                "desc": "Chain rapid enemy takedowns before the decay timer expires to ramp up score multipliers up to x3.0. Taking damage breaks the chain.",
-            },
-            {
-                "title": "HAZARDS & MOTHERSHIPS",
-                "tag": "COMBAT THREATS",
-                "color": (255, 70, 90),
-                "desc": "Asteroids fragment into dangerous shards upon impact. Boss motherships feature multiple phases and high-density projectile patterns.",
-            },
-        ]
-        
-        # 2 rows x 3 columns grid with spacious card dimensions
-        card_w, card_h = 380, 245
-        gap_x, gap_y = 30, 20
-        start_x = (self.game.width - (3 * card_w + 2 * gap_x)) // 2
-        start_y = 135
-        
-        self.cards = []
-        for i, item in enumerate(self.mechanics):
-            row = i // 3
-            col = i % 3
-            rect = pg.Rect(start_x + col * (card_w + gap_x), start_y + row * (card_h + gap_y), card_w, card_h)
-            self.cards.append({"rect": rect, "data": item})
+
+        self.tabs = ["CONTROLS", "WEAPONS", "POWER-UPS", "ARMADA"]
+        self.active_tab = 0
+        self.tab_rects = []
+        self.tab_hovered = None
+
+        # Build tab button rects
+        tab_w, tab_h = 220, 38
+        start_x = (self.game.width - (4 * tab_w + 3 * 16)) // 2
+        for i, tab_name in enumerate(self.tabs):
+            self.tab_rects.append(pg.Rect(start_x + i * (tab_w + 16), 115, tab_w, tab_h))
+
+        # Content categories
+        self.content_data = {
+            0: [ # CONTROLS
+                {"title": "FLIGHT VECTORING", "tag": "WASD / ARROWS / DPAD", "color": (0, 240, 255), "desc": "Omnidirectional vector thrusters with subtle inertia banking. Boundary barriers contain your fighter securely inside the theater."},
+                {"title": "PRIMARY FIRE", "tag": "SPACEBAR / BUTTON A", "color": (100, 190, 255), "desc": "Fires concentrated energy bolts. Hold for continuous auto-fire. Weapon power scales with campaign level and shop upgrades."},
+                {"title": "HOMING MISSILES", "tag": "M KEY / BUTTON Y", "color": (255, 140, 40), "desc": "Launches acoustic warheads that seek the highest-health target on screen, dealing 30 area-of-effect explosive damage."},
+                {"title": "PAUSE & OPTIONS", "tag": "ESC / P KEY / START", "color": (255, 200, 50), "desc": "Pauses flight, brings up real-time battle telemetry statistics, and allows on-the-fly volume and graphics adjustments."},
+            ],
+            1: [ # WEAPONS
+                {"title": "TIER-1 PLASMA BLASTER", "tag": "LEVELS 1 - 3", "color": (0, 240, 255), "desc": "Standard blue energy bolts dealing 10 base damage per shot.", "img": "laser"},
+                {"title": "TIER-2 CRIMSON CANNON", "tag": "LEVELS 4 - 6", "color": (255, 80, 80), "desc": "Heavy crimson plasma beams dealing 15 damage with increased hit radius.", "img": "laser_power"},
+                {"title": "TIER-3 VOID LANCE", "tag": "LEVELS 7 - 10", "color": (200, 80, 255), "desc": "Piercing purple void beams dealing 20 damage that cut through enemy armor.", "img": "laser_power"},
+                {"title": "ACOUSTIC MISSILE", "tag": "SPECIAL WEAPON", "color": (255, 140, 40), "desc": "Steerable self-guided warhead with 450 px/s speed and 30 AoE damage.", "img": "missile"},
+            ],
+            2: [ # POWER-UPS
+                {"title": "KINETIC SHIELD", "tag": "DEFENSE DROP", "color": (0, 240, 255), "desc": "Restores +40 barrier energy instantly to protect your hull from fatal breaches.", "img": "powerup_shield"},
+                {"title": "TRIPLE SHOT", "tag": "WEAPON BOOST", "color": (255, 200, 40), "desc": "Fires 3 angled laser beams simultaneously for 12 seconds of screen coverage.", "img": "powerup_triple"},
+                {"title": "SPEED BOOST", "tag": "ENGINES BOOST", "color": (50, 255, 120), "desc": "Increases thruster velocity and maneuvering agility for 12 seconds.", "img": "powerup_speed"},
+                {"title": "POWER LASER", "tag": "OVERCHARGE", "color": (255, 60, 80), "desc": "Instantly upgrades shot tier and doubles damage output for 10 seconds.", "img": "powerup_power_laser"},
+            ],
+            3: [ # ARMADA
+                {"title": "SCOUT RAIDER", "tag": "LIGHT FIGHTER", "color": (0, 255, 180), "desc": "Fast reconnaissance craft with sine-wave movement and rapid light lasers.", "img": "enemy_scout"},
+                {"title": "STINGER INTERCEPTOR", "tag": "MEDIUM INTERCEPTOR", "color": (255, 180, 0), "desc": "Agile tactical interceptor that dives aggressively toward the player.", "img": "enemy_stinger"},
+                {"title": "HEAVY CRUISER", "tag": "ELITE ARMORED", "color": (255, 70, 90), "desc": "High HP armored platform featuring telegraph chevrons and dual plasma volleys.", "img": "enemy_cruiser"},
+                {"title": "CRIMSON MOTHERSHIP", "tag": "BOSS FLAGSHIP", "color": (255, 40, 60), "desc": "Multi-phase boss featuring high-density bullet hell patterns and energy shields.", "img": "boss"},
+            ]
+        }
 
     def handle_events(self, events):
+        prev_tab = self.active_tab
+
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 self.back_hovered = self.back_rect.collidepoint(event.pos)
+                mouse_tab = None
+                for i, r in enumerate(self.tab_rects):
+                    if r.collidepoint(event.pos):
+                        mouse_tab = i
+                        break
+                if mouse_tab != self.tab_hovered:
+                    self.tab_hovered = mouse_tab
+                    if mouse_tab is not None:
+                        self.game.audio.play_ui_hover()
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.back_rect.collidepoint(event.pos):
+                    self.game.audio.play_ui_back()
                     self.game.change_state(MenuState(self.game))
                     return
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_RETURN, pg.K_BACKSPACE):
-                    self.game.change_state(MenuState(self.game))
-                    return
+                for i, r in enumerate(self.tab_rects):
+                    if r.collidepoint(event.pos):
+                        self.active_tab = i
+                        self.game.audio.play_ui_click()
+                        return
+
+        # InputMap action navigation
+        if self.game.input.is_pressed("left"):
+            self.active_tab = (self.active_tab - 1) % len(self.tabs)
+            self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
+
+        elif self.game.input.is_pressed("right"):
+            self.active_tab = (self.active_tab + 1) % len(self.tabs)
+            self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
+
+        elif self.game.input.is_pressed("cancel"):
+            self.game.audio.play_ui_back()
+            self.game.change_state(MenuState(self.game))
 
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
+
+        is_hovered = self.back_hovered or (self.tab_hovered is not None)
+        self.game.cursor.set_hover_state(is_hovered)
+        self.game.tooltip.clear()
 
     def draw(self, screen):
         screen.fill((10, 12, 22))
         self.starfield.draw(screen)
 
         # Header
-        title = self.game.assets.title_font.render("FLIGHT MANUAL & MECHANICS", True, (0, 240, 255))
-        screen.blit(title, title.get_rect(center=(self.game.width // 2, 50)))
+        title = self.game.assets.title_font.render("FLIGHT MANUAL & INTEL", True, (0, 240, 255))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 44)))
 
-        sub = self.game.assets.hud_font.render("Essential starship flight systems, weapons operation, and tactical survival protocols", True, (160, 190, 220))
-        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 92)))
+        sub = self.game.assets.hud_font.render("COMPREHENSIVE TACTICAL GUIDE TO STARSHIP SYSTEMS, ARMAMENT & ARMADA INTEL", True, (160, 190, 220))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 80)))
 
         # Back button
         _draw_ui_button(
             screen,
             self.back_rect,
-            "<- MENU",
+            "← MENU",
             self.game.assets.font,
             hovered=self.back_hovered,
             fill=(25, 36, 54, 220),
@@ -360,53 +397,82 @@ class InstructionsState(State):
             pulse=self.anim_timer * 8,
         )
 
-        # Draw cards
-        for card_item in self.cards:
-            rect = card_item["rect"]
-            data = card_item["data"]
-            theme_color = data["color"]
+        # Render Tab Buttons
+        for i, tab_name in enumerate(self.tabs):
+            r = self.tab_rects[i]
+            is_active = (i == self.active_tab)
+            is_hov = (i == self.tab_hovered)
+
+            fill = (24, 70, 96, 240) if is_active else ((20, 45, 68, 220) if is_hov else (14, 24, 40, 200))
+            border = (0, 255, 220, 255) if (is_active or is_hov) else (80, 110, 140, 255)
+            text_c = (0, 255, 220) if is_active else ((220, 245, 255) if is_hov else (160, 190, 215))
+
+            _draw_ui_button(screen, r, tab_name, self.game.assets.font, hovered=is_hov or is_active, fill=fill, border=border, text_color=text_c)
+
+        # Render 2x2 Grid Cards for Active Tab
+        cards = self.content_data.get(self.active_tab, [])
+        card_w, card_h = 560, 240
+        gap_x, gap_y = 30, 20
+        start_x = (self.game.width - (2 * card_w + gap_x)) // 2
+        start_y = 175
+
+        for idx, item in enumerate(cards):
+            row = idx // 2
+            col = idx % 2
+            rect = pg.Rect(start_x + col * (card_w + gap_x), start_y + row * (card_h + gap_y), card_w, card_h)
 
             card_surf = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
-            card_surf.fill((18, 26, 42, 215))
+            card_surf.fill((16, 24, 40, 225))
+            theme_color = item["color"]
             pg.draw.rect(card_surf, (*theme_color, 180), card_surf.get_rect(), 2, border_radius=12)
-            
-            # Top accent bar
-            pg.draw.rect(card_surf, (*theme_color, 240), pg.Rect(0, 0, rect.width, 4), border_top_left_radius=12, border_top_right_radius=12)
+            pg.draw.rect(card_surf, (*theme_color, 240), pg.Rect(0, 0, rect.width, 5), border_top_left_radius=12, border_top_right_radius=12)
             screen.blit(card_surf, rect)
 
             # Title
-            title_surf = self.game.assets.font.render(data["title"], True, (255, 255, 255))
-            screen.blit(title_surf, (rect.x + 16, rect.y + 14))
+            t_surf = self.game.assets.font.render(item["title"], True, (255, 255, 255))
+            screen.blit(t_surf, (rect.x + 18, rect.y + 16))
 
-            # Tag badge
-            tag_surf = self.game.assets.hud_font.render(f" {data['tag']} ", True, theme_color)
-            tag_rect = tag_surf.get_rect(topleft=(rect.x + 16, rect.y + 46))
-            bg_tag = pg.Surface((tag_rect.width + 8, tag_rect.height + 4), pg.SRCALPHA)
-            bg_tag.fill((*theme_color, 35))
-            pg.draw.rect(bg_tag, (*theme_color, 120), bg_tag.get_rect(), 1, border_radius=4)
-            screen.blit(bg_tag, (tag_rect.x - 4, tag_rect.y - 2))
-            screen.blit(tag_surf, tag_rect)
+            # Tag Badge
+            tag_surf = self.game.assets.hud_font.render(f" {item['tag']} ", True, theme_color)
+            tag_bg = pg.Surface((tag_surf.get_width() + 8, tag_surf.get_height() + 4), pg.SRCALPHA)
+            tag_bg.fill((*theme_color, 35))
+            pg.draw.rect(tag_bg, (*theme_color, 120), tag_bg.get_rect(), 1, border_radius=4)
+            screen.blit(tag_bg, (rect.x + 14, rect.y + 50))
+            screen.blit(tag_surf, (rect.x + 18, rect.y + 52))
+
+            # Optional Sprite Preview Icon
+            img_key = item.get("img")
+            if img_key and hasattr(self.game, 'assets'):
+                icon_img = self.game.assets.get_image(img_key, 54, 54)
+                if icon_img:
+                    icon_bg = pg.Surface((64, 64), pg.SRCALPHA)
+                    icon_bg.fill((10, 16, 28, 200))
+                    pg.draw.rect(icon_bg, (*theme_color, 150), icon_bg.get_rect(), 1, border_radius=8)
+                    icon_bg.blit(icon_img, icon_img.get_rect(center=(32, 32)))
+                    screen.blit(icon_bg, (rect.right - 80, rect.y + 16))
 
             # Divider line
-            pg.draw.line(screen, (*theme_color, 70), (rect.x + 16, rect.y + 78), (rect.x + rect.width - 16, rect.y + 78), 1)
+            pg.draw.line(screen, (*theme_color, 70), (rect.x + 18, rect.y + 88), (rect.x + rect.width - 18, rect.y + 88), 1)
 
-            # Multi-line wrapped description
-            words = data["desc"].split()
+            # Wrapped description text
+            words = item["desc"].split()
             lines = []
             curr_line = []
+            max_w = rect.width - 36
             for w in words:
                 curr_line.append(w)
-                rendered = self.game.assets.hud_font.render(" ".join(curr_line), True, (170, 190, 210))
-                if rendered.get_width() > rect.width - 32:
+                rendered = self.game.assets.hud_font.render(" ".join(curr_line), True, (190, 215, 235))
+                if rendered.get_width() > max_w:
                     curr_line.pop()
                     lines.append(" ".join(curr_line))
                     curr_line = [w]
             if curr_line:
                 lines.append(" ".join(curr_line))
 
-            for line_idx, line_str in enumerate(lines):
-                line_surf = self.game.assets.hud_font.render(line_str, True, (170, 190, 210))
-                screen.blit(line_surf, (rect.x + 16, rect.y + 90 + line_idx * 22))
+            for l_idx, l_str in enumerate(lines):
+                l_surf = self.game.assets.hud_font.render(l_str, True, (190, 215, 235))
+                screen.blit(l_surf, (rect.x + 18, rect.y + 102 + l_idx * 22))
+
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +591,8 @@ class OptionsState(State):
                         if s["id"] == "music": self.music_vol = s["val"]
                         elif s["id"] == "sfx": self.sfx_vol = s["val"]
                         elif s["id"] == "ui": self.ui_vol = s["val"]
+                        if hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui_slider()
                         self._apply_and_save()
                         return
 
@@ -541,28 +609,26 @@ class OptionsState(State):
                             if hasattr(self.game, 'toggle_fullscreen'):
                                 self.game.toggle_fullscreen()
                         if hasattr(self.game, 'audio') and self.game.audio:
-                            self.game.audio.play_ui("tick")
+                            self.game.audio.play_ui_toggle()
                         self._apply_and_save()
                         return
 
             elif event.type == pg.MOUSEBUTTONUP and event.button == 1:
                 self.dragging_slider = None
 
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_BACKSPACE):
-                    self._return()
-                elif event.key == pg.K_F11:
-                    self.fullscreen_enabled = not self.fullscreen_enabled
-                    for t in self.toggles:
-                        if t["id"] == "fullscreen":
-                            t["enabled"] = self.fullscreen_enabled
-                    if hasattr(self.game, 'toggle_fullscreen'):
-                        self.game.toggle_fullscreen()
-                    self._apply_and_save()
+        # InputMap navigation
+        if self.game.input.is_pressed("cancel"):
+            self._return()
 
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
+
+        pos = pg.mouse.get_pos()
+        is_hovered = self.back_rect.collidepoint(pos) or any(s["rect"].collidepoint(pos) for s in self.sliders) or any(t["rect"].collidepoint(pos) for t in self.toggles)
+        self.game.cursor.set_hover_state(is_hovered)
+        self.game.tooltip.clear()
+
 
     def draw(self, screen):
         screen.fill((10, 13, 22))
@@ -857,30 +923,44 @@ class HangarState(State):
                     self._proceed()
                 elif event.key in (pg.K_RETURN, pg.K_SPACE):
                     self._proceed()
-                elif event.key in (pg.K_LEFT, pg.K_a):
-                    self.selected_hull_idx = (self.selected_hull_idx - 1) % len(self.HULLS)
-                    self._save_and_sync()
-                    if hasattr(self.game, 'audio') and self.game.audio:
-                        self.game.audio.play_ui("tick")
-                elif event.key in (pg.K_RIGHT, pg.K_d):
-                    self.selected_hull_idx = (self.selected_hull_idx + 1) % len(self.HULLS)
-                    self._save_and_sync()
-                    if hasattr(self.game, 'audio') and self.game.audio:
-                        self.game.audio.play_ui("tick")
-                elif event.key in (pg.K_UP, pg.K_w, pg.K_1, pg.K_2, pg.K_3, pg.K_4):
-                    if event.key == pg.K_1: self.selected_color_idx = 0
-                    elif event.key == pg.K_2: self.selected_color_idx = 1
-                    elif event.key == pg.K_3: self.selected_color_idx = 2
-                    elif event.key == pg.K_4: self.selected_color_idx = 3
-                    else:
-                        self.selected_color_idx = (self.selected_color_idx + 1) % len(self.COLORS)
-                    self._save_and_sync()
-                    if hasattr(self.game, 'audio') and self.game.audio:
-                        self.game.audio.play_ui("tick")
+
+        # InputMap actions (Gamepad / Keyboard)
+        if self.game.input.is_pressed("left"):
+            self.selected_hull_idx = (self.selected_hull_idx - 1) % len(self.HULLS)
+            self._save_and_sync()
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.hull_rects[self.selected_hull_idx].centerx, self.hull_rects[self.selected_hull_idx].centery)
+
+        elif self.game.input.is_pressed("right"):
+            self.selected_hull_idx = (self.selected_hull_idx + 1) % len(self.HULLS)
+            self._save_and_sync()
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.hull_rects[self.selected_hull_idx].centerx, self.hull_rects[self.selected_hull_idx].centery)
+
+        elif self.game.input.is_pressed("up") or self.game.input.is_pressed("down"):
+            self.selected_color_idx = (self.selected_color_idx + 1) % len(self.COLORS)
+            self._save_and_sync()
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+
+        elif self.game.input.is_pressed("confirm"):
+            self._proceed()
+
+        elif self.game.input.is_pressed("cancel"):
+            self.game.audio.play_ui_back()
+            self._proceed()
 
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
+
+        pos = pg.mouse.get_pos()
+        is_hovered = self.back_hovered or self.deploy_hovered or self.prev_hovered or self.next_hovered or any(r.collidepoint(pos) for r in self.hull_rects) or any(r.collidepoint(pos) for r in self.swatch_rects)
+        self.game.cursor.set_hover_state(is_hovered)
+        self.game.tooltip.clear()
+
 
     def draw(self, screen):
         # Dark industrial hangar bay background
@@ -1111,64 +1191,83 @@ class HangarState(State):
 
 
 class LevelSelectState(State):
-    """Interactive campaign-level chooser with mouse + keyboard support."""
+    """Interactive campaign-level chooser with 3-star ratings, InputMap, and theater previews."""
     def __init__(self, game):
         super().__init__(game)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=100)
-        self.save_system = SaveSystem()
+        self.save_system = getattr(self.game, 'save_system', SaveSystem())
         self.progress = self.save_system.load_progress()
         self.hovered_index = None
         self.selected_index = 0
         self.buttons = []
         self.blink_timer = 0.0
-        self.back_rect = pg.Rect(40, 40, 100, 48)
+        self.back_rect = pg.Rect(40, 40, 110, 48)
         self.back_hovered = False
-        self.hangar_rect = pg.Rect(self.game.width - 160, 40, 120, 48)
+        self.hangar_rect = pg.Rect(self.game.width - 170, 40, 130, 48)
         self.hangar_hovered = False
         self._build_buttons()
 
-        # Stop any active soundtrack when entering level select / menus
+        # Stop combat soundtracks when entering campaign screen
         if hasattr(self.game, 'audio') and self.game.audio:
-            self.game.audio.stop_music(fade_ms=400)
+            self.game.audio.play_music("menu")
 
     def _build_buttons(self):
         self.buttons = []
         highest_unlocked = self.progress.get("highest_unlocked", 1)
         completed_levels = set(self.progress.get("completed_levels", []))
+        stars_map = self.progress.get("level_stars", {})
+        scores_map = self.progress.get("level_scores", {})
 
         for level_num in range(1, 11):
             row = (level_num - 1) // 5
             col = (level_num - 1) % 5
-            x = 130 + col * 220
-            y = 180 + row * 150
-            rect = pg.Rect(x, y, 160, 90)
+            x = 110 + col * 220
+            y = 180 + row * 160
+            rect = pg.Rect(x, y, 180, 110)
             is_unlocked = level_num <= highest_unlocked
             is_completed = level_num in completed_levels
+            star_cnt = int(stars_map.get(str(level_num), 3 if is_completed else 0))
+            best_sc = int(scores_map.get(str(level_num), 0))
+
             self.buttons.append({
                 "level": level_num,
                 "rect": rect,
                 "unlocked": is_unlocked,
                 "completed": is_completed,
+                "stars": star_cnt,
+                "best_score": best_sc,
             })
 
     def handle_events(self, events):
+        prev_sel = self.selected_index
+
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 mouse_pos = event.pos
                 self.back_hovered = self.back_rect.collidepoint(mouse_pos)
                 self.hangar_hovered = self.hangar_rect.collidepoint(mouse_pos)
-                self.hovered_index = None
+                mouse_hover = None
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(mouse_pos):
-                        self.hovered_index = idx
-                        self.selected_index = idx
+                        mouse_hover = idx
                         break
+                if mouse_hover != self.hovered_index:
+                    self.hovered_index = mouse_hover
+                    if mouse_hover is not None:
+                        self.selected_index = mouse_hover
+                        if prev_sel != mouse_hover and hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui_hover()
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = event.pos
                 if self.back_rect.collidepoint(mouse_pos):
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_back()
                     self.game.change_state(MenuState(self.game))
                     return
                 if self.hangar_rect.collidepoint(mouse_pos):
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_click()
                     self.game.change_state(HangarState(self.game, return_state="level_select"))
                     return
                 for idx, button in enumerate(self.buttons):
@@ -1176,49 +1275,80 @@ class LevelSelectState(State):
                         self.selected_index = idx
                         self._launch_level(button["level"])
                         return
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_BACKSPACE):
-                    self.game.change_state(MenuState(self.game))
-                elif event.key == pg.K_h:
-                    self.game.change_state(HangarState(self.game, return_state="level_select"))
-                elif event.key in (pg.K_UP, pg.K_w):
-                    self._move_selection(-5)
-                elif event.key in (pg.K_DOWN, pg.K_s):
-                    self._move_selection(5)
-                elif event.key in (pg.K_LEFT, pg.K_a):
-                    self._move_selection(-1)
-                elif event.key in (pg.K_RIGHT, pg.K_d):
-                    self._move_selection(1)
-                elif event.key == pg.K_RETURN:
-                    # Keyboard Enter can only launch a level if the mouse is currently hovering a tile.
-                    if self.hovered_index is not None:
-                        level_num = self.buttons[self.hovered_index]["level"]
-                        if self.buttons[self.hovered_index]["unlocked"]:
-                            self._launch_level(level_num)
+
+        # InputMap 2D Grid navigation
+        if self.game.input.is_pressed("up"):
+            self._move_selection(-5)
+        elif self.game.input.is_pressed("down"):
+            self._move_selection(5)
+        elif self.game.input.is_pressed("left"):
+            self._move_selection(-1)
+        elif self.game.input.is_pressed("right"):
+            self._move_selection(1)
+        elif self.game.input.is_pressed("confirm"):
+            level_num = self.buttons[self.selected_index]["level"]
+            if self.buttons[self.selected_index]["unlocked"]:
+                self._launch_level(level_num)
+        elif self.game.input.is_pressed("cancel"):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_back()
+            self.game.change_state(MenuState(self.game))
 
     def _move_selection(self, delta):
         next_idx = self.selected_index + delta
         if 0 <= next_idx < len(self.buttons):
             self.selected_index = next_idx
             self.hovered_index = None
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.buttons[next_idx]["rect"].centerx, self.buttons[next_idx]["rect"].centery)
 
     def _launch_level(self, level_num):
         if level_num <= self.progress.get("highest_unlocked", 1):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_click()
             self.game.change_state(PlayState(self.game, selected_level=level_num))
 
     def update(self, dt):
         self.starfield.update(dt)
         self.blink_timer += dt
 
+        pos = pg.mouse.get_pos()
+        is_hovered = self.back_hovered or self.hangar_hovered or (self.hovered_index is not None)
+        self.game.cursor.set_hover_state(is_hovered)
+
+        # Update floating tooltips for selected / hovered level tile
+        active_idx = self.hovered_index if self.hovered_index is not None else self.selected_index
+        if 0 <= active_idx < len(self.buttons):
+            btn = self.buttons[active_idx]
+            lvl = btn["level"]
+            theater = get_theater(lvl)
+            is_boss = lvl in (5, 10)
+            
+            title = f"MISSION LEVEL {lvl} — {theater.get('name', 'SECTOR')}"
+            body = f"Theater: {theater.get('subtitle', 'Deep Space')}. "
+            if is_boss:
+                body += "⚠️ WARNING: MOTHERSHIP BOSS ENCOUNTER AHEAD! "
+            if btn["best_score"] > 0:
+                body += f"Best Mission Score: {btn['best_score']} PTS. "
+            if not btn["unlocked"]:
+                body = f"🔒 LOCKED SECTOR. Clear Level {lvl - 1} to unlock mission clearance."
+            
+            rect = btn["rect"]
+            self.game.tooltip.set_tooltip(title, body, (rect.centerx, rect.bottom))
+
     def draw(self, screen):
         screen.fill((8, 10, 24))
         self.starfield.draw(screen)
 
-        title = self.game.assets.title_font.render("LEVELS", True, (0, 240, 255))
-        title_rect = title.get_rect(center=(self.game.width // 2, 100))
+        title = self.game.assets.title_font.render("CAMPAIGN MISSION SELECTOR", True, (0, 240, 255))
+        title_rect = title.get_rect(center=(self.game.width // 2, 85))
         screen.blit(title, title_rect)
 
-        # Exit arrow to return to the menu.
+        sub_title = self.game.assets.hud_font.render("SELECT AN UNLOCKED LEVEL SECTOR TO DEPLOY YOUR FIGHTER", True, (160, 190, 220))
+        screen.blit(sub_title, sub_title.get_rect(center=(self.game.width // 2, 120)))
+
+        # Exit button to return to menu
         _draw_ui_button(
             screen,
             self.back_rect,
@@ -1248,7 +1378,7 @@ class LevelSelectState(State):
             rect = button["rect"]
             unlocked = button["unlocked"]
             completed = button["completed"]
-            hovered = self.hovered_index == idx
+            hovered = (self.hovered_index == idx) or (self.selected_index == idx)
             blink = idx == (self.progress.get("highest_unlocked", 1) - 1) and self.blink_timer % 1.0 < 0.5
 
             theater = get_theater(button["level"])
@@ -1256,22 +1386,22 @@ class LevelSelectState(State):
             ar, ag, ab = accent
 
             if not unlocked:
-                fill = (32, 34, 42)
-                border = (70, 75, 85)
+                fill = (24, 26, 34)
+                border = (60, 65, 75)
             elif completed:
-                fill = (max(0, int(ar * 0.15)), max(0, int(ag * 0.35 + 20)), max(0, int(ab * 0.2)))
-                border = (80, 255, 140)
+                fill = (max(0, int(ar * 0.16)), max(0, int(ag * 0.32 + 20)), max(0, int(ab * 0.22)))
+                border = (0, 255, 180)
             else:
-                fill = (max(0, int(ar * 0.18)), max(0, int(ag * 0.18)), max(0, int(ab * 0.25)))
+                fill = (max(0, int(ar * 0.2)), max(0, int(ag * 0.2)), max(0, int(ab * 0.28)))
                 border = (min(255, int(ar * 0.8)), min(255, int(ag * 0.8)), min(255, int(ab * 0.9)))
 
             if hovered:
                 if unlocked:
-                    fill = (min(255, int(fill[0] + 30)), min(255, int(fill[1] + 30)), min(255, int(fill[2] + 35)))
-                    border = (255, 255, 255) if completed else (0, 255, 255)
+                    fill = (min(255, int(fill[0] + 35)), min(255, int(fill[1] + 35)), min(255, int(fill[2] + 40)))
+                    border = (0, 255, 220)
                 else:
-                    fill = (50, 52, 60)
-                    border = (110, 115, 130)
+                    fill = (45, 48, 56)
+                    border = (100, 105, 120)
 
             if unlocked and blink:
                 fill = (min(255, int(ar * 0.35)), min(255, int(ag * 0.35)), min(255, int(ab * 0.45)))
@@ -1279,27 +1409,49 @@ class LevelSelectState(State):
 
             panel = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
             panel.fill((0, 0, 0, 0))
-            pg.draw.rect(panel, fill, panel.get_rect(), border_radius=10)
-            pg.draw.rect(panel, border, panel.get_rect(), 2, border_radius=10)
+            pg.draw.rect(panel, fill, panel.get_rect(), border_radius=12)
+            pg.draw.rect(panel, border, panel.get_rect(), 2, border_radius=12)
+
+            # Boss Alert Banner Tag if Level 5 or 10
+            if button["level"] in (5, 10):
+                b_tag_c = (255, 60, 80) if unlocked else (120, 50, 60)
+                pg.draw.rect(panel, b_tag_c, pg.Rect(0, 0, rect.width, 4), border_top_left_radius=12, border_top_right_radius=12)
+
             screen.blit(panel, rect)
 
             label = self.game.assets.hud_font.render(f"LEVEL {button['level']}", True, (255, 255, 255))
-            screen.blit(label, label.get_rect(center=(rect.centerx, rect.centery - 12)))
+            screen.blit(label, label.get_rect(center=(rect.centerx, rect.y + 22)))
 
             # Theater name subtitle
-            theater_sub = self.game.assets.hud_font.render(theater.get("name", ""), True, (min(255, int(ar * 0.9)), min(255, int(ag * 0.9)), min(255, int(ab * 0.9))))
-            theater_rect = theater_sub.get_rect(center=(rect.centerx, rect.centery + 8))
-            screen.blit(theater_sub, theater_rect)
+            theater_sub = self.game.assets.hud_font.render(theater.get("name", ""), True, (min(255, int(ar * 0.9 + 20)), min(255, int(ag * 0.9 + 20)), min(255, int(ab * 0.9 + 20))))
+            screen.blit(theater_sub, theater_sub.get_rect(center=(rect.centerx, rect.y + 44)))
 
-            if completed:
-                done_tag = self.game.assets.hud_font.render("CLEARED", True, (200, 255, 210))
-                screen.blit(done_tag, done_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+            # 3-Star Rating Badges
+            if unlocked:
+                stars_earned = button["stars"]
+                star_x_start = rect.centerx - 22
+                for s_i in range(3):
+                    star_c = (255, 215, 0) if (s_i < stars_earned) else (70, 80, 95)
+                    star_cx = star_x_start + s_i * 22
+                    star_cy = rect.y + 68
+                    pg.draw.circle(screen, star_c, (star_cx, star_cy), 7)
+                    if s_i < stars_earned:
+                        pg.draw.circle(screen, (255, 255, 200), (star_cx, star_cy), 3)
+
+            # Best score label
+            if button["best_score"] > 0:
+                sc_lbl = self.game.assets.hud_font.render(f"{button['best_score']} PTS", True, (0, 230, 255))
+                screen.blit(sc_lbl, sc_lbl.get_rect(center=(rect.centerx, rect.bottom - 14)))
+            elif completed:
+                done_tag = self.game.assets.hud_font.render("CLEARED", True, (0, 255, 180))
+                screen.blit(done_tag, done_tag.get_rect(center=(rect.centerx, rect.bottom - 14)))
             elif not unlocked:
-                lock_tag = self.game.assets.hud_font.render("LOCKED", True, (190, 190, 200))
-                screen.blit(lock_tag, lock_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+                lock_tag = self.game.assets.hud_font.render("LOCKED 🔒", True, (160, 160, 175))
+                screen.blit(lock_tag, lock_tag.get_rect(center=(rect.centerx, rect.bottom - 14)))
             else:
-                status_tag = self.game.assets.hud_font.render("PLAY", True, (0, 240, 255))
-                screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.centery + 28)))
+                status_tag = self.game.assets.hud_font.render("READY", True, (0, 240, 255))
+                screen.blit(status_tag, status_tag.get_rect(center=(rect.centerx, rect.bottom - 14)))
+
 
 
 class PlayState(State):
@@ -1915,94 +2067,120 @@ class PlayState(State):
 
 class PauseState(State):
     """
-    State representing game execution freezing.
+    Sprint 11 & 12 — Reactive Pause Telemetry & Options Overlay.
     
-    Draws a semi-transparent screen overlay and ignores updates to sprites.
+    Draws a glassmorphism dark tint overlay, displays real-time mission telemetry,
+    and supports InputMap menu navigation with full audio feedback.
     """
     def __init__(self, game, previous_state):
         super().__init__(game)
-        # Store references to frozen state to allow resuming later
         self.previous_state = previous_state
+        self.selected_index = 0
         self.hovered_index = None
         self.buttons = []
         self._build_buttons()
         self.anim_timer = 0.0
         
-        # Transparent dark overlay cover
         self.overlay = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
-        self.overlay.fill((10, 12, 22, 200)) # Dark tint with 200 alpha
+        self.overlay.fill((8, 12, 22, 215))
 
     def _build_buttons(self):
+        cx = self.game.width // 3 - 40
         self.buttons = [
-            {"label": "RESUME", "rect": pg.Rect(self.game.width // 2 - 130, self.game.height // 2 - 45, 260, 50)},
-            {"label": "OPTIONS", "rect": pg.Rect(self.game.width // 2 - 130, self.game.height // 2 + 15, 260, 50)},
-            {"label": "QUIT TO MENU", "rect": pg.Rect(self.game.width // 2 - 130, self.game.height // 2 + 75, 260, 50)},
+            {"label": "RESUME FLIGHT",  "rect": pg.Rect(cx - 130, 260, 260, 46)},
+            {"label": "RESTART LEVEL",  "rect": pg.Rect(cx - 130, 320, 260, 46)},
+            {"label": "SYSTEM OPTIONS", "rect": pg.Rect(cx - 130, 380, 260, 46)},
+            {"label": "QUIT TO MENU",   "rect": pg.Rect(cx - 130, 440, 260, 46)},
         ]
 
     def handle_events(self, events):
-        """Allows resuming, options tweaking, or quitting back to Menu State using mouse or keyboard."""
+        prev_sel = self.selected_index
+
         for event in events:
             if event.type == pg.MOUSEMOTION:
-                self.hovered_index = None
+                mouse_hover = None
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
-                        self.hovered_index = idx
+                        mouse_hover = idx
                         break
+                if mouse_hover != self.hovered_index:
+                    self.hovered_index = mouse_hover
+                    if mouse_hover is not None:
+                        self.selected_index = mouse_hover
+                        if prev_sel != mouse_hover and hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui_hover()
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
-                        if idx == 0:
-                            self.game.change_state(self.previous_state)
-                        elif idx == 1:
-                            self.game.change_state(OptionsState(self.game, return_state=self))
-                        else:
-                            self.game.change_state(MenuState(self.game))
+                        self._trigger_action(idx)
                         return
-            elif event.type == pg.KEYDOWN:
-                # ESC returns back to the active gameplay state
-                if event.key == pg.K_ESCAPE:
-                    self.game.change_state(self.previous_state)
-                elif event.key == pg.K_o:
-                    self.game.change_state(OptionsState(self.game, return_state=self))
-                # Q returns to the main menu
-                elif event.key == pg.K_q:
-                    self.game.change_state(MenuState(self.game))
+
+        # InputMap navigation
+        if self.game.input.is_pressed("up"):
+            self.selected_index = (self.selected_index - 1) % len(self.buttons)
+            self.hovered_index = None
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.buttons[self.selected_index]["rect"].centerx, self.buttons[self.selected_index]["rect"].centery)
+
+        elif self.game.input.is_pressed("down"):
+            self.selected_index = (self.selected_index + 1) % len(self.buttons)
+            self.hovered_index = None
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.buttons[self.selected_index]["rect"].centerx, self.buttons[self.selected_index]["rect"].centery)
+
+        elif self.game.input.is_pressed("confirm"):
+            self._trigger_action(self.selected_index)
+
+        elif self.game.input.is_pressed("cancel") or self.game.input.is_pressed("pause"):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_back()
+            self.game.change_state(self.previous_state)
+
+    def _trigger_action(self, idx):
+        if idx == 0: # Resume
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_click()
+            self.game.change_state(self.previous_state)
+        elif idx == 1: # Restart level
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_click()
+            lvl = getattr(self.previous_state, 'selected_level', 1)
+            self.game.change_state(PlayState(self.game, selected_level=lvl))
+        elif idx == 2: # Options
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_click()
+            self.game.change_state(OptionsState(self.game, return_state=self))
+        elif idx == 3: # Quit to Menu
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_back()
+            self.game.change_state(MenuState(self.game))
 
     def update(self, dt):
         self.anim_timer += dt
+        is_hovered = (self.hovered_index is not None)
+        self.game.cursor.set_hover_state(is_hovered)
+        self.game.tooltip.clear()
 
     def draw(self, screen):
-        # 1. Render gameplay frames in background so player can see screen behind overlay
+        # Render gameplay frame behind overlay
         self.previous_state.draw(screen)
-        
-        # 2. Layer transparency overlay
         screen.blit(self.overlay, (0, 0))
         
-        # 3. Draw Pause menu elements
-        title = self.game.assets.title_font.render("GAME PAUSED", True, (255, 200, 0))
-        title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 3))
-        screen.blit(title, title_rect)
+        # Pause Title Header
+        title = self.game.assets.title_font.render("SYSTEM PAUSED", True, (0, 240, 255))
+        screen.blit(title, title.get_rect(center=(self.game.width // 2, 110)))
 
+        sub = self.game.assets.hud_font.render("FLIGHT SUSPENDED — MISSION TELEMETRY & CONTROLS ACTIVE", True, (160, 190, 220))
+        screen.blit(sub, sub.get_rect(center=(self.game.width // 2, 148)))
+
+        # Draw Menu Action Buttons (Left side)
         for idx, button in enumerate(self.buttons):
             rect = button["rect"]
-            hovered = (self.hovered_index == idx)
+            hovered = (self.hovered_index == idx) or (self.selected_index == idx)
             is_danger = "QUIT" in button["label"]
-
-            if is_danger and hovered:
-                fill = (65, 15, 25, 240)
-                border = (255, 60, 80, 255)
-                text_color = (255, 140, 160)
-            elif is_danger:
-                fill = (35, 18, 24, 210)
-                border = (140, 60, 70, 255)
-                text_color = (220, 170, 180)
-            else:
-                fill = (20, 30, 44, 220)
-                border = (90, 120, 150, 255)
-                text_color = (240, 240, 240)
-                if hovered:
-                    fill = (24, 88, 105, 240)
-                    border = (0, 255, 255, 255)
 
             _draw_ui_button(
                 screen,
@@ -2010,12 +2188,46 @@ class PauseState(State):
                 button["label"],
                 self.game.assets.font,
                 hovered=hovered,
-                fill=fill,
-                border=border,
-                text_color=text_color,
-                pulse=self.anim_timer * 10 + idx,
+                pulse=self.anim_timer * 8 + idx,
                 danger=is_danger,
             )
+
+        # ---------------- MISSION TELEMETRY CARD (Right side) ----------------
+        t_rect = pg.Rect(self.game.width // 2 + 30, 220, 480, 280)
+        t_panel = pg.Surface((t_rect.width, t_rect.height), pg.SRCALPHA)
+        t_panel.fill((16, 24, 40, 225))
+        pg.draw.rect(t_panel, (0, 220, 255, 200), t_panel.get_rect(), 2, border_radius=12)
+        pg.draw.rect(t_panel, (0, 240, 255, 240), pg.Rect(0, 0, t_rect.width, 5), border_top_left_radius=12, border_top_right_radius=12)
+        screen.blit(t_panel, t_rect)
+
+        t_title = self.game.assets.font.render("MISSION TELEMETRY METRICS", True, (0, 255, 220))
+        screen.blit(t_title, (t_rect.x + 20, t_rect.y + 16))
+
+        # Read live play state data
+        ps = self.previous_state
+        curr_score = getattr(ps, 'score', 0)
+        lvl_num = getattr(ps, 'level_sys', None).level_number if hasattr(ps, 'level_sys') else 1
+        wave_num = getattr(ps, 'level_sys', None).wave_number if hasattr(ps, 'level_sys') else 1
+        player = getattr(ps, 'player', None)
+        hp_val = f"{int(player.health)}/{int(player.max_health)}" if player else "N/A"
+        sh_val = f"{int(player.shield)}/{int(player.max_shield)}" if player else "N/A"
+        missiles_val = str(player.missile_count) if player else "0"
+
+        metrics = [
+            ("CURRENT SCORE", f"{curr_score} PTS", (255, 220, 50)),
+            ("MISSION SECTOR", f"LEVEL {lvl_num} — WAVE {wave_num}", (0, 240, 255)),
+            ("HULL INTEGRITY", hp_val, (255, 120, 120)),
+            ("SHIELD MATRIX", sh_val, (120, 220, 255)),
+            ("MISSILES READY", f"{missiles_val} WARHEADS", (255, 160, 60)),
+        ]
+
+        for i, (m_lbl, m_val, m_col) in enumerate(metrics):
+            y_pos = t_rect.y + 55 + i * 40
+            l_surf = self.game.assets.hud_font.render(m_lbl, True, (160, 190, 220))
+            v_surf = self.game.assets.font.render(m_val, True, m_col)
+            screen.blit(l_surf, (t_rect.x + 20, y_pos))
+            screen.blit(v_surf, (t_rect.right - 20 - v_surf.get_width(), y_pos - 2))
+
 
 
 class GameOverState(State):

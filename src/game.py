@@ -63,6 +63,10 @@ class Game:
         from ui.cursor import SoftwareCursor
         self.cursor = SoftwareCursor(self.assets, self.width, self.height)
 
+        # Sprint 12 / Pillar 3: Floating Tooltip Manager
+        from ui.tooltip import UITooltipManager
+        self.tooltip = UITooltipManager(self.assets.font, self.assets.title_font, self.width, self.height)
+
         # Sprint 11 / Pillar H: Cinematic State Transitions
         from render.transition import StateTransition
         self.transition = StateTransition(self.width, self.height)
@@ -122,6 +126,7 @@ class Game:
             # 2. SUBSYSTEM UPDATES
             self.input.update(dt, events=events)
             self.audio.update(dt)
+            self.tooltip.update(dt)
             self.cursor.update(dt, lerp_aim=isinstance(self.state, PlayState) if 'PlayState' in globals() else False)
             self.transition.update(dt, self)
 
@@ -131,9 +136,11 @@ class Game:
             self.state.update(dt)
             self.state.draw(self.screen)
 
-            # 4. TRANSITION & TACTICAL CURSOR OVERLAY
+            # 4. TOOLTIP, TRANSITION & TACTICAL CURSOR OVERLAY
+            self.tooltip.draw(self.screen)
             self.transition.draw(self.screen)
             self.cursor.draw(self.screen)
+
             
             # 5. REFRESH SCREEN
             pg.display.flip()
