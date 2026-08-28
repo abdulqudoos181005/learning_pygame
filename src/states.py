@@ -322,6 +322,17 @@ class InstructionsState(State):
                 {"title": "CRIMSON MOTHERSHIP", "tag": "BOSS FLAGSHIP", "color": (255, 40, 60), "desc": "Multi-phase boss featuring high-density bullet hell patterns and energy shields.", "img": "boss"},
             ]
         }
+        self.mechanics = [
+            {"title": "FLIGHT CONTROLS", "tag": "WASD / ARROWS", "color": (0, 230, 255), "desc": "Full omnidirectional vector thrusters with inertial dampening. Boundary barriers keep your fighter securely within combat theater."},
+            {"title": "PRIMARY PHOTON BLASTER", "tag": "SPACEBAR", "color": (100, 180, 255), "desc": "Rapid concentrated plasma bolts. Upgradeable with Triple Cannons, Faster Reload modules, and heavy piercing laser slugs."},
+            {"title": "HOMING MISSILES", "tag": "M KEY", "color": (255, 130, 40), "desc": "Lock-on acoustic warheads that seek out the highest-threat enemy on screen, dealing massive area-of-effect explosive damage."},
+            {"title": "KINETIC SHIELD BARRIER", "tag": "DEFENSE SYSTEM", "color": (0, 255, 200), "desc": "Absorbs 100% of projectile and collision impacts before hull breach. Restored via blue powerup orbs and persistent shop nanites."},
+            {"title": "COMBO MULTIPLIER", "tag": "SCORE BOOST", "color": (255, 220, 50), "desc": "Chain rapid enemy takedowns before the decay timer expires to ramp up score multipliers up to x3.0. Taking damage breaks the chain."},
+            {"title": "HAZARDS & MOTHERSHIPS", "tag": "COMBAT THREATS", "color": (255, 70, 90), "desc": "Asteroids fragment into dangerous shards upon impact. Boss motherships feature multiple phases and high-density projectile patterns."},
+        ]
+        self.cards = [{"rect": pg.Rect(0, 0, 100, 100), "data": c} for c in self.mechanics]
+
+
 
     def handle_events(self, events):
         prev_tab = self.active_tab
@@ -341,37 +352,59 @@ class InstructionsState(State):
 
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.back_rect.collidepoint(event.pos):
-                    self.game.audio.play_ui_back()
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_back()
                     self.game.change_state(MenuState(self.game))
                     return
                 for i, r in enumerate(self.tab_rects):
                     if r.collidepoint(event.pos):
                         self.active_tab = i
-                        self.game.audio.play_ui_click()
+                        if hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui_click()
                         return
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_ESCAPE, pg.K_BACKSPACE):
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_back()
+                    self.game.change_state(MenuState(self.game))
+                    return
 
         # InputMap action navigation
-        if self.game.input.is_pressed("left"):
-            self.active_tab = (self.active_tab - 1) % len(self.tabs)
-            self.game.audio.play_ui_hover()
-            self.game.cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
+        inp = getattr(self.game, 'input', None)
+        if inp:
+            if inp.is_pressed("left"):
+                self.active_tab = (self.active_tab - 1) % len(self.tabs)
+                if hasattr(self.game, 'audio') and self.game.audio:
+                    self.game.audio.play_ui_hover()
+                cursor = getattr(self.game, 'cursor', None)
+                if cursor:
+                    cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
 
-        elif self.game.input.is_pressed("right"):
-            self.active_tab = (self.active_tab + 1) % len(self.tabs)
-            self.game.audio.play_ui_hover()
-            self.game.cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
+            elif inp.is_pressed("right"):
+                self.active_tab = (self.active_tab + 1) % len(self.tabs)
+                if hasattr(self.game, 'audio') and self.game.audio:
+                    self.game.audio.play_ui_hover()
+                cursor = getattr(self.game, 'cursor', None)
+                if cursor:
+                    cursor.snap_to(self.tab_rects[self.active_tab].centerx, self.tab_rects[self.active_tab].centery)
 
-        elif self.game.input.is_pressed("cancel"):
-            self.game.audio.play_ui_back()
-            self.game.change_state(MenuState(self.game))
+            elif inp.is_pressed("cancel"):
+                if hasattr(self.game, 'audio') and self.game.audio:
+                    self.game.audio.play_ui_back()
+                self.game.change_state(MenuState(self.game))
 
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
 
         is_hovered = self.back_hovered or (self.tab_hovered is not None)
-        self.game.cursor.set_hover_state(is_hovered)
-        self.game.tooltip.clear()
+        cursor = getattr(self.game, 'cursor', None)
+        if cursor:
+            cursor.set_hover_state(is_hovered)
+        tooltip = getattr(self.game, 'tooltip', None)
+        if tooltip:
+            tooltip.clear()
+
 
     def draw(self, screen):
         screen.fill((10, 12, 22))
@@ -958,8 +991,12 @@ class HangarState(State):
 
         pos = pg.mouse.get_pos()
         is_hovered = self.back_hovered or self.deploy_hovered or self.prev_hovered or self.next_hovered or any(r.collidepoint(pos) for r in self.hull_rects) or any(r.collidepoint(pos) for r in self.swatch_rects)
-        self.game.cursor.set_hover_state(is_hovered)
-        self.game.tooltip.clear()
+        cursor = getattr(self.game, 'cursor', None)
+        if cursor:
+            cursor.set_hover_state(is_hovered)
+        tooltip = getattr(self.game, 'tooltip', None)
+        if tooltip:
+            tooltip.clear()
 
 
     def draw(self, screen):
@@ -2255,7 +2292,12 @@ class GameOverState(State):
 
     def _save_score(self):
         final_name = self.player_name.strip() or "PILOT"
-        self.save_system.save_score(final_name, self.score)
+        loadout = getattr(self.game, 'loadout', {})
+        hull = loadout.get("hull", "interceptor")
+        color = loadout.get("color", "blue")
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_ui_click()
+        self.save_system.save_score(final_name, self.score, hull=hull, color=color)
         self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
@@ -2629,15 +2671,22 @@ class ShopState(State):
     def handle_events(self, events):
         if self.transition_locked:
             return
+        prev_hov = self.hovered
+
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 mp = event.pos
                 self.skip_hovered = self.skip_rect.collidepoint(mp)
-                self.hovered = None
+                mouse_h = None
                 for i, rect in enumerate(self.card_rects):
                     if rect.collidepoint(mp):
-                        self.hovered = i
+                        mouse_h = i
                         break
+                if mouse_h != self.hovered:
+                    self.hovered = mouse_h
+                    if mouse_h is not None and hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_hover()
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 mp = event.pos
                 if self.skip_rect.collidepoint(mp):
@@ -2647,13 +2696,34 @@ class ShopState(State):
                     if rect.collidepoint(mp) and i not in self.purchased:
                         self._buy(i)
                         return
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_SPACE):
-                    self._proceed()
+
+        # InputMap navigation
+        if self.game.input.is_pressed("left"):
+            self.hovered = 0 if self.hovered is None else (self.hovered - 1) % len(self.card_rects)
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.card_rects[self.hovered].centerx, self.card_rects[self.hovered].centery)
+
+        elif self.game.input.is_pressed("right"):
+            self.hovered = 0 if self.hovered is None else (self.hovered + 1) % len(self.card_rects)
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self.game.cursor.snap_to(self.card_rects[self.hovered].centerx, self.card_rects[self.hovered].centery)
+
+        elif self.game.input.is_pressed("confirm"):
+            if self.hovered is not None and self.hovered not in self.purchased:
+                self._buy(self.hovered)
+            else:
+                self._proceed()
+
+        elif self.game.input.is_pressed("cancel"):
+            self._proceed()
 
     def _buy(self, idx):
         offer = self.offers[idx]
         if self.score < offer["cost"]:
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui("danger")
             return  # not enough score
         self.score -= offer["cost"]
         self.purchased.add(idx)
@@ -2676,6 +2746,30 @@ class ShopState(State):
         self.starfield.update(dt)
         self.particles.update(dt)
         self.timer += dt
+
+        pos = pg.mouse.get_pos()
+        is_hovered = self.skip_hovered or (self.hovered is not None)
+        cursor = getattr(self.game, 'cursor', None)
+        if cursor:
+            cursor.set_hover_state(is_hovered)
+
+        tooltip = getattr(self.game, 'tooltip', None)
+        if tooltip:
+            if self.hovered is not None and 0 <= self.hovered < len(self.offers):
+                off = self.offers[self.hovered]
+                r = self.card_rects[self.hovered]
+                upgrades = getattr(self.game, 'upgrades', {})
+                curr_val = upgrades.get(off["id"], 0)
+                next_val = curr_val + off["step"]
+                unit = "%" if isinstance(off["step"], float) else ""
+                mult = 100 if unit == "%" else 1
+                
+                title = f"UPGRADE MODULE — {off['name']}"
+                body = f"{off['desc']} Current Bonus: +{curr_val * mult}{unit} → Next Tier: +{next_val * mult}{unit}. Cost: {off['cost']} PTS."
+                tooltip.set_tooltip(title, body, (r.centerx, r.top))
+            else:
+                tooltip.clear()
+
 
     def draw(self, screen):
         screen.fill((8, 10, 24))
@@ -2817,21 +2911,36 @@ class ShopState(State):
 
 
 class LevelCompleteState(State):
-    """Short congratulation popup shown immediately after a level clears."""
-    def __init__(self, game, score, cleared_level):
+    """Congratulation popup shown immediately after a level clears with 3-star evaluation."""
+    def __init__(self, game, score, cleared_level, lives_lost=0):
         super().__init__(game)
         self.score = score
         self.cleared_level = int(cleared_level)
+        self.lives_lost = lives_lost
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=100)
         self.timer = 0.0
         self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
         self.continue_hovered = False
         self.transition_locked = False
 
+        # Calculate 3-star rating: 1 star = clear, 2 stars = score target, 3 stars = no lives lost
+        target_score = 3000 * self.cleared_level
+        self.stars = 1
+        if self.score >= target_score:
+            self.stars += 1
+        if self.lives_lost == 0:
+            self.stars += 1
+
+        # Save progress to save system
+        self.save_system = getattr(self.game, 'save_system', SaveSystem())
+        self.save_system.save_progress(self.cleared_level, stars=self.stars, score=self.score)
+
     def _continue(self):
         if self.transition_locked:
             return
         self.transition_locked = True
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_ui_click()
         self.game.change_state(ShopState(self.game, self.score, self.cleared_level))
 
     def handle_events(self, events):
@@ -2844,9 +2953,15 @@ class LevelCompleteState(State):
                 if self.continue_rect.collidepoint(event.pos):
                     self._continue()
 
+        inp = getattr(self.game, 'input', None)
+        if inp and (inp.is_pressed("confirm") or inp.is_pressed("cancel")):
+            self._continue()
+
     def update(self, dt):
         self.starfield.update(dt)
         self.timer += dt
+        self.game.cursor.set_hover_state(self.continue_hovered)
+        self.game.tooltip.clear()
 
     def draw(self, screen):
         screen.fill((8, 10, 24))
@@ -2857,11 +2972,22 @@ class LevelCompleteState(State):
         screen.blit(title, title_rect)
 
         level_text = self.game.assets.hud_font.render(f"LEVEL {self.cleared_level} CLEARED", True, (255, 210, 110))
-        level_rect = level_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 20))
+        level_rect = level_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 10))
         screen.blit(level_text, level_rect)
 
+        # Draw 3-Star Rating Badges
+        star_x_start = self.game.width // 2 - 40
+        star_y = self.game.height // 3 + 50
+        for s_i in range(3):
+            s_earned = s_i < self.stars
+            s_color = (255, 215, 0) if s_earned else (60, 70, 85)
+            cx = star_x_start + s_i * 40
+            pg.draw.circle(screen, s_color, (cx, star_y), 14)
+            if s_earned:
+                pg.draw.circle(screen, (255, 255, 200), (cx, star_y), 6)
+
         score_text = self.game.assets.font.render(f"SCORE: {self.score}", True, (255, 255, 255))
-        score_rect = score_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 70))
+        score_rect = score_text.get_rect(center=(self.game.width // 2, self.game.height // 3 + 100))
         screen.blit(score_text, score_rect)
 
         _draw_ui_button(
@@ -2875,6 +3001,7 @@ class LevelCompleteState(State):
             text_color=(240, 250, 255),
             pulse=self.timer * 8,
         )
+
 
 
 class GameCompleteState(State):
@@ -2895,7 +3022,12 @@ class GameCompleteState(State):
         if self.transition_locked:
             return
         self.transition_locked = True
-        self.save_system.save_score("VICTOR", self.score)
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.play_ui_click()
+        loadout = getattr(self.game, 'loadout', {})
+        hull = loadout.get("hull", "interceptor")
+        color = loadout.get("color", "blue")
+        self.save_system.save_score("VICTOR", self.score, hull=hull, color=color)
         self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
@@ -2908,9 +3040,15 @@ class GameCompleteState(State):
                 if self.continue_rect.collidepoint(event.pos):
                     self._finalize()
 
+        if self.game.input.is_pressed("confirm") or self.game.input.is_pressed("cancel"):
+            self._finalize()
+
     def update(self, dt):
         self.starfield.update(dt)
         self.timer += dt
+        self.game.cursor.set_hover_state(self.continue_hovered)
+        self.game.tooltip.clear()
+
 
     def draw(self, screen):
         screen.fill((5, 8, 18))
@@ -2945,39 +3083,50 @@ class GameCompleteState(State):
 
 
 class HighScoresState(State):
-    """State representing the Top-10 Leaderboard listing loaded from SaveSystem."""
+    """Sprint 9 & 12 — Leaderboard Listing with Trophy Badges, Loadout Icons, and InputMap navigation."""
     def __init__(self, game):
         super().__init__(game)
-        self.save_system = SaveSystem()
+        self.starfield = Starfield(self.game.width, self.game.height, num_stars=90)
+        self.save_system = getattr(self.game, 'save_system', SaveSystem())
         self.scores_list = self.save_system.load_scores()
         self.back_rect = pg.Rect(40, 40, 120, 48)
         self.back_hovered = False
         self.anim_timer = 0.0
 
     def handle_events(self, events):
-        """Allows returning back to the Main Menu with mouse or keyboard."""
+        """Allows returning back to Main Menu with mouse, keyboard, or gamepad."""
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 self.back_hovered = self.back_rect.collidepoint(event.pos)
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.back_rect.collidepoint(event.pos):
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_back()
                     self.game.change_state(MenuState(self.game))
                     return
-            elif event.type == pg.KEYDOWN:
-                if event.key in (pg.K_ESCAPE, pg.K_RETURN):
-                    self.game.change_state(MenuState(self.game))
+
+        if self.game.input.is_pressed("cancel") or self.game.input.is_pressed("confirm"):
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_back()
+            self.game.change_state(MenuState(self.game))
 
     def update(self, dt):
+        self.starfield.update(dt)
         self.anim_timer += dt
+        self.game.cursor.set_hover_state(self.back_hovered)
+        self.game.tooltip.clear()
 
     def draw(self, screen):
-        # Cosmic dark blue fill
         screen.fill((10, 12, 22))
+        self.starfield.draw(screen)
         
-        # Leaderboard Title
-        title = self.game.assets.title_font.render("HIGH SCORES", True, (0, 200, 255))
-        title_rect = title.get_rect(center=(self.game.width // 2, self.game.height // 6))
+        # Leaderboard Header Title
+        title = self.game.assets.title_font.render("HALL OF FAME", True, (0, 240, 255))
+        title_rect = title.get_rect(center=(self.game.width // 2, 75))
         screen.blit(title, title_rect)
+
+        sub_title = self.game.assets.hud_font.render("TOP PILOT RECORDS & STARSHIP LOADOUT ACHIEVEMENTS", True, (160, 190, 220))
+        screen.blit(sub_title, sub_title.get_rect(center=(self.game.width // 2, 112)))
 
         _draw_ui_button(
             screen,
@@ -2990,22 +3139,54 @@ class HighScoresState(State):
             text_color=(190, 210, 220),
             pulse=self.anim_timer * 8,
         )
+
+        # Table Container Panel
+        table_rect = pg.Rect(self.game.width // 2 - 340, 150, 680, 510)
+        table_panel = pg.Surface((table_rect.width, table_rect.height), pg.SRCALPHA)
+        table_panel.fill((16, 24, 40, 225))
+        pg.draw.rect(table_panel, (0, 220, 255, 200), table_panel.get_rect(), 2, border_radius=12)
+        screen.blit(table_panel, table_rect)
+
+        # Column Header
+        h_rank = self.game.assets.hud_font.render("RANK", True, (0, 255, 220))
+        h_ship = self.game.assets.hud_font.render("CRAFT", True, (0, 255, 220))
+        h_name = self.game.assets.hud_font.render("PILOT CALLSIGN", True, (0, 255, 220))
+        h_score = self.game.assets.hud_font.render("TOTAL SCORE", True, (0, 255, 220))
+        screen.blit(h_rank, (table_rect.x + 25, table_rect.y + 18))
+        screen.blit(h_ship, (table_rect.x + 110, table_rect.y + 18))
+        screen.blit(h_name, (table_rect.x + 210, table_rect.y + 18))
+        screen.blit(h_score, (table_rect.right - 25 - h_score.get_width(), table_rect.y + 18))
+        pg.draw.line(screen, (0, 220, 255, 120), (table_rect.x + 20, table_rect.y + 44), (table_rect.right - 20, table_rect.y + 44), 1)
         
-        # Draw high scores in a formatted 3-column table
+        # Rows
+        trophies = ["🥇", "🥈", "🥉"]
         for idx, item in enumerate(self.scores_list[:10]):
-            rank  = f"{idx+1}."
-            name  = item.get("name", "PILOT")
+            y_pos = table_rect.y + 60 + idx * 42
+
+            # Trophy / Rank Label
+            if idx < 3:
+                rank_str = f"{trophies[idx]} {idx+1}."
+                color = (255, 215, 0) if idx == 0 else ((220, 225, 240) if idx == 1 else (255, 160, 80))
+            else:
+                rank_str = f"{idx+1}."
+                color = (150, 180, 210)
+
+            name = item.get("name", "PILOT")
             score = str(item.get("score", 0))
-            
-            # Gold color for 1st place, silver-cyan for top 3, muted grey for rest
-            color = (255, 220, 0) if idx == 0 else ((200, 220, 240) if idx < 3 else (130, 150, 170))
-            
-            rank_surf  = self.game.assets.font.render(rank,  True, color)
-            name_surf  = self.game.assets.font.render(name,  True, color)
+            hull = item.get("hull", "interceptor")
+            hull_color = item.get("color", "blue")
+
+            rank_surf = self.game.assets.font.render(rank_str, True, color)
+            name_surf = self.game.assets.font.render(name, True, color)
             score_surf = self.game.assets.font.render(score, True, color)
-            
-            # Beautiful horizontal spacing alignments (Rank left, Name center, Score right)
-            y_pos = self.game.height // 3.2 + idx * 36
-            screen.blit(rank_surf,  (self.game.width // 2 - 180, y_pos))
-            screen.blit(name_surf,  (self.game.width // 2 -  80, y_pos))
-            screen.blit(score_surf, (self.game.width // 2 + 100, y_pos))
+
+            # Ship icon representation
+            life_key = f"ui_hud/life_counters/hud_life_{hull}_{hull_color}"
+            life_img = self.game.assets.get_image(life_key, 22, 22)
+
+            screen.blit(rank_surf, (table_rect.x + 25, y_pos))
+            if life_img:
+                screen.blit(life_img, (table_rect.x + 120, y_pos + 2))
+            screen.blit(name_surf, (table_rect.x + 210, y_pos))
+            screen.blit(score_surf, (table_rect.right - 25 - score_surf.get_width(), y_pos))
+
