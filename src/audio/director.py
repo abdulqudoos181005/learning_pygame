@@ -282,7 +282,10 @@ class AudioDirector:
         """
         Plays UI audio grammar:
         - 'hover' / 'tick' : subtle navigation feedback
-        - 'confirm' / 'select' : positive choice chime
+        - 'confirm' / 'select' / 'click' : positive choice chime
+        - 'back' / 'cancel' : lower return tone
+        - 'slider' : subtle frequency step tick
+        - 'toggle' : switch state chime
         - 'danger' / 'quit' : low warning tone
         - 'purchase' : upgrade shop success chime
         """
@@ -292,11 +295,23 @@ class AudioDirector:
         final_vol = self.ui_volume * volume_mult
 
         try:
-            if sound_type in ("purchase", "confirm", "select"):
+            if sound_type in ("purchase", "confirm", "select", "click"):
                 if self.assets:
                     snd = self.assets.get_sound("powerup")
                     if snd and hasattr(snd, "set_volume"):
                         snd.set_volume(final_vol * 0.7)
+                        snd.play()
+            elif sound_type in ("back", "cancel"):
+                if self.assets:
+                    snd = self.assets.get_sound("shield_down")
+                    if snd and hasattr(snd, "set_volume"):
+                        snd.set_volume(final_vol * 0.4)
+                        snd.play()
+            elif sound_type in ("slider", "toggle"):
+                if self.assets:
+                    snd = self.assets.get_sound("laser_pew")
+                    if snd and hasattr(snd, "set_volume"):
+                        snd.set_volume(final_vol * 0.2)
                         snd.play()
             elif sound_type == "danger":
                 if self.assets:
@@ -309,7 +324,28 @@ class AudioDirector:
                 if self.assets:
                     snd = self.assets.get_sound("laser_pew")
                     if snd and hasattr(snd, "set_volume"):
-                        snd.set_volume(final_vol * 0.15)
+                        snd.set_volume(final_vol * 0.12)
                         snd.play()
         except Exception:
             pass
+
+    def play_ui_hover(self):
+        """Triggers soft hover tick audio."""
+        self.play_ui("hover")
+
+    def play_ui_click(self):
+        """Triggers button confirm click chime."""
+        self.play_ui("click")
+
+    def play_ui_back(self):
+        """Triggers back / cancel chime."""
+        self.play_ui("back")
+
+    def play_ui_slider(self):
+        """Triggers slider drag tick sound."""
+        self.play_ui("slider")
+
+    def play_ui_toggle(self):
+        """Triggers toggle switch chime."""
+        self.play_ui("toggle")
+

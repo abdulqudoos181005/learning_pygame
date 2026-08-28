@@ -116,32 +116,33 @@ class SaveSystem:
             
         return self._get_default_scores()
 
-    def save_score(self, name, score):
+    def save_score(self, name, score, hull="interceptor", color="blue"):
         """
-        Adds a new score entry, sorts the leaderboard, limits it to the top 10,
-        and saves it back to the JSON file.
+        Adds a new score entry with player hull/color loadout, sorts leaderboard,
+        limits to top 10, and saves back to JSON.
         """
-        # Load the existing list of high scores
+        # Load existing list of high scores
         scores = self.load_scores()
         
-        # Sanitize the input name:
-        # Strip trailing/leading spaces, convert to uppercase, and restrict to 8 characters
-        # for clean UI rendering in the HighScores table. If name is empty, default to "UNKNOWN".
+        # Sanitize input name
         clean_name = str(name).strip().upper()[:8] or "UNKNOWN"
+        clean_hull = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
+        clean_color = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
         
-        # Append the new score entry
-        scores.append({"name": clean_name, "score": int(score)})
+        # Append new score entry
+        scores.append({
+            "name": clean_name,
+            "score": int(score),
+            "hull": clean_hull,
+            "color": clean_color
+        })
         
-        # Sort again to ensure the newly added score goes to its correct rank position
-        scores = sorted(scores, key=lambda x: x["score"], reverse=True)
-        
-        # Slice the list to retain only the top 10 scores
+        # Sort by score descending
+        scores = sorted(scores, key=lambda x: x.get("score", 0), reverse=True)
         scores = scores[:10]
         
         try:
-            # Open file in write mode ('w') and save the updated list as formatted JSON
             with open(self.filepath, 'w') as f:
-                # indent=4 formats the JSON file with 4-space indentation, making it human-readable
                 json.dump(scores, f, indent=4)
             return True
         except Exception as e:
@@ -149,7 +150,7 @@ class SaveSystem:
             return False
 
     def load_progress(self):
-        """Loads the player's level unlock/progression data from disk."""
+        """Loads player's level unlock, 3-star ratings, and level high scores from disk."""
         if not os.path.exists(self.progress_filepath):
             return self._get_default_progress()
 
@@ -159,30 +160,52 @@ class SaveSystem:
                 if isinstance(data, dict):
                     highest = int(data.get("highest_unlocked", 1))
                     completed = data.get("completed_levels", [])
+                    level_stars = data.get("level_stars", {})
+                    level_scores = data.get("level_scores", {})
+
                     if not isinstance(completed, list):
                         completed = []
+                    if not isinstance(level_stars, dict):
+                        level_stars = {}
+                    if not isinstance(level_scores, dict):
+                        level_scores = {}
+
                     highest = max(1, min(highest, 10))
                     return {
                         "highest_unlocked": highest,
-                        "completed_levels": [int(level) for level in completed if isinstance(level, int)]
+                        "completed_levels": [int(l) for l in completed if isinstance(l, (int, str)) and str(l).isdigit()],
+                        "level_stars": {str(k): int(v) for k, v in level_stars.items()},
+                        "level_scores": {str(k): int(v) for k, v in level_scores.items()}
                     }
         except Exception as e:
             print(f"Warning: Failed to load level progress JSON: {e}")
 
         return self._get_default_progress()
 
-    def save_progress(self, selected_level, completed_levels=None):
-        """Save or update level progression for the unlocked campaign."""
+    def save_progress(self, selected_level, completed_levels=None, stars=0, score=0):
+        """Save or update level progression, 3-star ratings, and per-level high score."""
         progress = self.load_progress()
-        highest_unlocked = max(progress.get("highest_unlocked", 1), min(selected_level + 1, 10))
+        lvl_key = str(selected_level)
+
+        highest_unlocked = max(progress.get("highest_unlocked", 1), min(int(selected_level) + 1, 10))
         completed = set(progress.get("completed_levels", []))
         if completed_levels is not None:
-            completed.update(completed_levels)
+            completed.update([int(l) for l in completed_levels])
         completed.add(int(selected_level))
+
+        stars_dict = progress.get("level_stars", {})
+        existing_stars = int(stars_dict.get(lvl_key, 0))
+        stars_dict[lvl_key] = max(existing_stars, min(3, max(0, int(stars))))
+
+        scores_dict = progress.get("level_scores", {})
+        existing_score = int(scores_dict.get(lvl_key, 0))
+        scores_dict[lvl_key] = max(existing_score, int(score))
 
         payload = {
             "highest_unlocked": int(highest_unlocked),
-            "completed_levels": sorted(completed)
+            "completed_levels": sorted(completed),
+            "level_stars": stars_dict,
+            "level_scores": scores_dict
         }
 
         try:
@@ -196,15 +219,18 @@ class SaveSystem:
     def _get_default_scores(self):
         """Predefined default scores list when no high score file is found."""
         return [
-            {"name": "COMMANDER", "score": 10000},
-            {"name": "PILOT", "score": 5000},
-            {"name": "RECRUIT", "score": 1000}
+            {"name": "COMMANDER", "score": 10000, "hull": "interceptor", "color": "blue"},
+            {"name": "PILOT", "score": 5000, "hull": "cruiser", "color": "orange"},
+            {"name": "RECRUIT", "score": 1000, "hull": "vanguard", "color": "green"}
         ]
 
     def _get_default_progress(self):
         """Default progression record for a fresh player profile."""
         return {
             "highest_unlocked": 1,
-            "completed_levels": []
+            "completed_levels": [],
+            "level_stars": {},
+            "level_scores": {}
         }
+
 
