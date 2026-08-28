@@ -947,3 +947,85 @@ Extra additive effects and high brightness layers were washed out and obscuring 
 - No gameplay parameters (damage values, speed boosts, wave configs, powerup drops) altered.
 - The particle visual (circle shape, colors, lifespan) is preserved with high-performance alpha fades.
 
+---
+
+## Sprint 12 — UI/UX Master Overhaul, Reactiveness & Interactive Polish
+
+### Executive Summary & UI/UX Expert Analysis
+After a thorough UI/UX evaluation across all 15 game states and UI modules, Sprint 12 resolves critical interaction flaws, missing audio feedback, navigation disconnects, and static layout presentations. This sprint elevates **Space Shooters** from a functional game to a responsive, deeply tactile, and polished arcade product.
+
+#### Critical Mistakes & Gaps Identified:
+1. **Input System Disconnect**: Menu navigation bypasses `InputMap` (gamepads, key rebindings, and action maps are ignored in menus).
+2. **Audio Reactivity Vacuum**: Hovering/clicking buttons in 80% of states lacks UI audio feedback (`hover_tick`, `button_click`, `slider_adjust`).
+3. **Instant Click Cutoff**: Mouse clicks transition states instantly without allowing pressed button visual feedback (`click_timer`) to render.
+4. **Mouse/Keyboard Sync Bugs**: Mouse hover states get stuck when transitioning to keyboard/gamepad navigation.
+5. **Lack of Contextual Tooltips & Stat Comparisons**: No floating tooltips or visual stat comparison bars in Hangar, Options, or Shop.
+6. **Flat & Static UI Motion**: Absence of UI card entrance animations, spring physics hover scaling, and micro-interactions.
+7. **Level Select Campaign Gaps**: Missing per-level 3-star ratings, high score tracking per level, and animated theater preview cards.
+8. **Static Reticle Cursor**: Software cursor remains a static reticle across menus instead of morphing to hover reticle / pointer feedback.
+9. **Pause & Options Visual Polish**: Options sliders lack percentages and live sound samples; Pause menu lacks run statistics card and blurred background snapshot.
+10. **Tabbed Field Manual & Trophy Leaderboards**: Instructions lack interactive tabs; Leaderboards lack Gold/Silver/Bronze trophy iconography and player loadout tags.
+
+---
+
+### Key Pillars of Sprint 12
+
+#### Pillar 1 — Unified InputMap Engine for All UI States & Navigation Sync
+- **Device-Agnostic Navigation**: Wire `InputMap.is_pressed("up")`, `"down"`, `"left"`, `"right"`, `"confirm"`, `"cancel"` into all 15 game states. Keyboard rebinds and Gamepad D-Pad / Thumbstick / A/B buttons navigate menus seamlessly.
+- **Mouse/Keyboard Focus Sync**: Automatically clear mouse `hovered_index = None` upon keyboard/gamepad action. Bounding box mouse movement re-enables hover state gracefully without dual highlights.
+- **Tactile Click Phase**: Introduce a 0.08s visual click depression phase before state switching, giving satisfying button press feel instead of abrupt cuts.
+
+#### Pillar 2 — UI Audio Grammar & Auditory Feedback Engine
+- **Audio Director UI Grammar**: Add dedicated UI SFX hooks in `AudioDirector`:
+  - `play_ui_hover()` — Soft cyber tick on hover / selection change.
+  - `play_ui_click()` — Resonant synth click chime on button confirm.
+  - `play_ui_back()` — Lower-pitched back/cancel chime on escape / menu return.
+  - `play_ui_slider()` — Subtle frequency tick on slider drag.
+  - `play_ui_toggle()` — Dual-tone switch chime for toggles.
+- **Full Coverage**: Integrate auditory feedback across Main Menu, Level Select, Hangar, Options, Shop, Pause Menu, Instructions, High Scores, Game Over, and Level Complete screens.
+
+#### Pillar 3 — UI Tooltip Manager & Dynamic Stat Comparison Cards
+- **`UITooltipManager` (`src/ui/tooltip.py`)**: Centralized floating tooltip card component featuring dark glassmorphism styling, cyan border glow, title, description, and smooth alpha fade-in.
+- **Hangar Stat Comparisons**: Display side-by-side animated bar meters for Speed, Armor, Weapon Rate, and Missile Capacity with green/red differential badges (`+15% Speed`, `-10% Armor`) when cycling ship hulls.
+- **Shop Upgrade Tooltips**: Show current level vs next level stat changes and feature descriptions on hover.
+- **Options Tooltips**: Display helpful explanations for graphics, audio, and accessibility settings.
+
+#### Pillar 4 — Motion, Micro-Animations & Responsive Micro-Interactions
+- **Spring & Scale Hover**: `_draw_ui_button` and card containers smoothly scale up (`1.0 -> 1.04`) with dynamic glowing border pulse on hover.
+- **UI Click Sparkle Bursts**: Spawns a small 6-particle cyan/gold spark burst at cursor click position.
+- **Staggered Panel Entrances**: Cards in Menu, Shop, Options, Level Select, and High Scores slide and fade in with staggered 40ms delays.
+- **Context-Aware Reticle Cursor**: `SoftwareCursor` expands its outer reticle ring and pulses over clickable buttons, snapping softly to active keyboard/gamepad focus targets.
+
+#### Pillar 5 — Level Select Campaign Overhaul (3-Star Ratings & High Scores)
+- **Campaign Performance System (`level_progress.json`)**: Save 3-star rating achievements and highest score per level:
+  - ⭐ **Star 1**: Level Clear
+  - ⭐ **Star 2**: Score Threshold reached (e.g. Level 1 ≥ 5,000 pts)
+  - ⭐ **Star 3**: Flawless / Fast Clear (no lives lost)
+- **Visual Level Cards**: Display glowing gold star icons and "BEST: XXXX PTS" on each level tile.
+- **Theater Card Previews**: Hovering a level tile displays a mini preview banner of the level's background theater (`Bio Nursery`, `Crimson Raid`, `Solar Throne`) and boss alert indicator.
+
+#### Pillar 6 — Screen-Specific Visual & Interactive Polish
+- **Pause Menu Overlay**: Darkened glassmorphism blur background snapshot + Run Statistics Card (Current Score, Waves Cleared, Total Kills, Combo Peak, Flight Time) + Restart Level button.
+- **Options Screen Overhaul**: Draggable volume sliders with exact numeric percentage labels (`80%`), smooth slider knob physics, live sound sample testing, and sliding toggle switches.
+- **Flight Manual (`InstructionsState`)**: Restructure into a 4-tab interactive guide (`[CONTROLS]`, `[WEAPONS]`, `[POWER-UPS]`, `[ARMADA / ENEMIES]`) with live animated sprite icons and stat badges.
+- **High Scores (`HighScoresState`)**: Gold 🥇, Silver 🥈, Bronze 🥉 trophy badges for top 3 positions, ship loadout icon display next to player name, and pulse highlight on new record entries.
+
+---
+
+### Verification Plan
+
+#### Automated Tests
+- `tests/test_sprint12_ui.py`:
+  - `InputMap` action navigation test across `MenuState`, `LevelSelectState`, `OptionsState`, `HangarState`, `PauseState`, `ShopState`.
+  - `AudioDirector` UI sound method calls verify no crashes and proper bus routing.
+  - `level_progress.json` 3-star calculation and high score tracking logic.
+  - `UITooltipManager` creation and positioning test.
+  - All existing 32 unit tests pass without regressions.
+
+#### Manual Verification
+- Verify mouse and keyboard/gamepad navigation across all screens without dual highlights or stuck focus.
+- Confirm UI audio feedback plays on hover, click, slider drag, and back buttons across all states.
+- Verify 3-star ratings and high scores display on level tiles in Level Select.
+- Inspect Hangar stat comparison bars, Shop tooltips, Options percentage sliders, and Pause menu run stats card.
+
+
