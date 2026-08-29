@@ -22,21 +22,22 @@ class SoftwareCursor:
         self.pos = pg.Vector2(width // 2, height // 2)
         self.target_pos = pg.Vector2(width // 2, height // 2)
         self.base_cursor_img = assets.get_image("ui_hud/reticle_cursor/crosshair_tactical_cursor", 32, 32)
-        self.visible = True
+        self.visible = False
         
         self.hovered_control = False
         self.hover_scale = 1.0
         self.anim_timer = 0.0
 
-        # Hide hardware OS cursor
+        # Ensure native hardware OS cursor is always visible and responsive
         try:
-            pg.mouse.set_visible(False)
+            pg.mouse.set_visible(True)
         except Exception:
             pass
 
     def snap_to(self, x, y):
         """Snaps software cursor position to a keyboard/gamepad focused control."""
         self.target_pos.update(x, y)
+        self.pos.update(x, y)
 
     def set_hover_state(self, is_hovered):
         """Sets whether cursor is currently hovering an interactive element."""
@@ -46,24 +47,21 @@ class SoftwareCursor:
         """Updates software cursor position and dynamic hover scale."""
         self.anim_timer += dt
         
-        if not self.hovered_control:
+        try:
             raw_x, raw_y = pg.mouse.get_pos()
             self.target_pos.update(raw_x, raw_y)
+        except Exception:
+            pass
 
         # Smooth scale interpolation
         target_scale = 1.28 if self.hovered_control else 1.0
         self.hover_scale += (target_scale - self.hover_scale) * min(1.0, 16.0 * dt)
 
-        if lerp_aim:
-            # Smooth aim lerp for tactical weapon feel
-            diff = self.target_pos - self.pos
+        diff = self.target_pos - self.pos
+        if diff.length_squared() > 1.0 and lerp_aim:
             self.pos += diff * min(1.0, 24.0 * dt)
         else:
-            diff = self.target_pos - self.pos
-            if diff.length_squared() > 1.0:
-                self.pos += diff * min(1.0, 20.0 * dt)
-            else:
-                self.pos.update(self.target_pos)
+            self.pos.update(self.target_pos)
 
     def draw(self, surface):
         """Renders the crosshair software cursor."""

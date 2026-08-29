@@ -1177,9 +1177,10 @@ Sprint 12 is a UI/UX and polish sprint, so the primary risks are aesthetic and e
 - **Detection**: Visual inspection of all UI elements across different screen sizes.
 - **Mitigation**: Use `scale` and `width`/`height` properties correctly; avoid manual coordinate scaling that breaks aspect ratios.
 
-11. **Hardware Cursor Removal**: Verify the operating system cursor is hidden and only the `SoftwareCursor` is visible.
-12. **Visual Clarity**: Ensure blur effects and animations do not make text or important elements unreadable.
-13. **issues with cursor**:
+13. **Cursor Restoration & Bug Fixes (Completed)**:
+    - **Issue Identified**: `SoftwareCursor` hid the native OS hardware cursor and suffered from a freeze bug where `if not self.hovered_control:` stopped reading `pg.mouse.get_pos()`, freezing the mouse whenever buttons or controls were selected. Additionally, software reticle interpolation introduced input lag.
+    - **Fix Applied**: Restored native hardware OS cursor visibility (`pg.mouse.set_visible(True)`) for zero-latency, responsive mouse pointing across all menus and gameplay. Fixed `SoftwareCursor.update()` to continually track real mouse coordinates without freezing, and corrected `MenuState` hover tracking (`is_any_hovered = (self.hovered_index is not None)`).
+
 
 ---
 

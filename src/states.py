@@ -228,7 +228,7 @@ class MenuState(State):
                 self._select_option(action_idx)
 
         # Update cursor hover state
-        is_any_hovered = (self.hovered_index is not None) or (self.selected_index is not None)
+        is_any_hovered = (self.hovered_index is not None)
         self.game.cursor.set_hover_state(is_any_hovered)
 
         # Update tooltips
