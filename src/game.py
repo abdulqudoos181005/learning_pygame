@@ -102,6 +102,8 @@ class Game:
         """
         Switches the active game state, optionally routing through a cinematic transition.
         """
+        if hasattr(self, 'tooltip'):
+            self.tooltip.clear()
         if transition_type:
             self.transition.start(new_state, transition_type=transition_type, duration=duration)
         else:

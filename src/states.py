@@ -232,11 +232,12 @@ class MenuState(State):
         self.game.cursor.set_hover_state(is_any_hovered)
 
         # Update tooltips
-        active_idx = self.hovered_index if self.hovered_index is not None else self.selected_index
-        if 0 <= active_idx < len(self.tooltips):
-            title, body = self.tooltips[active_idx]
-            rect = self.buttons[active_idx]["rect"]
+        if self.hovered_index is not None and 0 <= self.hovered_index < len(self.tooltips):
+            title, body = self.tooltips[self.hovered_index]
+            rect = self.buttons[self.hovered_index]["rect"]
             self.game.tooltip.set_tooltip(title, body, (rect.right, rect.top))
+        else:
+            self.game.tooltip.clear()
 
     def draw(self, screen):
         screen.fill((10, 12, 22))
@@ -1355,9 +1356,8 @@ class LevelSelectState(State):
         self.game.cursor.set_hover_state(is_hovered)
 
         # Update floating tooltips for selected / hovered level tile
-        active_idx = self.hovered_index if self.hovered_index is not None else self.selected_index
-        if 0 <= active_idx < len(self.buttons):
-            btn = self.buttons[active_idx]
+        if self.hovered_index is not None and 0 <= self.hovered_index < len(self.buttons):
+            btn = self.buttons[self.hovered_index]
             lvl = btn["level"]
             theater = get_theater(lvl)
             is_boss = lvl in (5, 10)
@@ -1373,6 +1373,8 @@ class LevelSelectState(State):
             
             rect = btn["rect"]
             self.game.tooltip.set_tooltip(title, body, (rect.centerx, rect.bottom))
+        else:
+            self.game.tooltip.clear()
 
     def draw(self, screen):
         screen.fill((8, 10, 24))
