@@ -101,5 +101,70 @@ class TestSprint12UI(unittest.TestCase):
             self.assertEqual(top.get("color"), "green")
 
 
+    def test_menu_and_level_select_tooltip_hover_visibility(self):
+        """Test that tooltips only appear when mouse is hovering over a button and hide when not."""
+        from src.states import MenuState, LevelSelectState
+        from src.input_map import InputMap
+
+        class DummyGame:
+            def __init__(self, assets, tooltip_mgr, cursor, audio):
+                self.width = 1280
+                self.height = 720
+                self.assets = assets
+                self.tooltip = tooltip_mgr
+                self.cursor = cursor
+                self.audio = audio
+                self.input = InputMap()
+                self.save_system = SaveSystem()
+                self.state = None
+
+            def change_state(self, state):
+                if hasattr(self, 'tooltip'):
+                    self.tooltip.clear()
+                self.state = state
+
+        game = DummyGame(self.assets, self.tooltip_mgr, self.cursor, self.audio)
+
+        # 1. MenuState
+        menu = MenuState(game)
+        # Initially not hovering
+        menu.update(0.016)
+        self.assertFalse(self.tooltip_mgr.active)
+        self.assertEqual(self.tooltip_mgr.target_alpha, 0.0)
+
+        # Mouse hovers over first button
+        menu.hovered_index = 0
+        menu.update(0.016)
+        self.assertTrue(self.tooltip_mgr.active)
+        self.assertEqual(self.tooltip_mgr.title, "PLAY CAMPAIGN")
+        self.assertEqual(self.tooltip_mgr.target_alpha, 240.0)
+
+        # Mouse moves away (hovered_index becomes None)
+        menu.hovered_index = None
+        menu.update(0.016)
+        self.assertFalse(self.tooltip_mgr.active)
+        self.assertEqual(self.tooltip_mgr.target_alpha, 0.0)
+
+        # 2. LevelSelectState
+        lvl_state = LevelSelectState(game)
+        lvl_state.update(0.016)
+        self.assertFalse(self.tooltip_mgr.active)
+        self.assertEqual(self.tooltip_mgr.target_alpha, 0.0)
+
+        # Mouse hovers over level 1 button
+        lvl_state.hovered_index = 0
+        lvl_state.update(0.016)
+        self.assertTrue(self.tooltip_mgr.active)
+        self.assertIn("MISSION LEVEL 1", self.tooltip_mgr.title)
+        self.assertEqual(self.tooltip_mgr.target_alpha, 240.0)
+
+        # Mouse moves away from level tiles
+        lvl_state.hovered_index = None
+        lvl_state.update(0.016)
+        self.assertFalse(self.tooltip_mgr.active)
+        self.assertEqual(self.tooltip_mgr.target_alpha, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
