@@ -1199,5 +1199,35 @@ Sprint 12 is a UI/UX and polish sprint, so the primary risks are aesthetic and e
 
 - Verify mouse and keyboard/gamepad navigation across all screens without dual highlights or stuck focus.
 - Confirm UI audio feedback plays on hover, click, slider drag, and back buttons across all states.
-- Verify 3-star ratings and high scores display on level tiles in Level Select.
-- Inspect Hangar stat comparison bars, Shop tooltips, Options percentage sliders, and Pause menu run stats card.
+
+
+---
+
+## Sprint 13 — User Authentication & Database-Backed Progression
+
+Sprint 13 introduces multi-user accounts, persistent database storage, and user-scoped score/progression tracking.
+
+### 3-Phase Roadmap
+- **Phase 1: Login & Registration Page (Auth UI & State)** *(Current Focus)*
+- **Phase 2: Database & Backend Engine (SQLite, Schema, Hashing & CRUD)**
+- **Phase 3: Final Integration & Data Connection (Session Management, User-Scoped Leaderboards & Saves)**
+
+---
+
+### Phase 1: Login & Registration Page (Detailed Plan)
+
+#### 1. Interactive Text Field Component (`src/ui/text_input.py`)
+- Reusable text box widget with focus glow, pulsing caret, and placeholder support.
+- Password masking (`••••••`) with show/hide toggle.
+- Full keyboard support (alphanumeric input, backspace hold-repeat, max character limit).
+
+#### 2. Auth State (`LoginState` in `src/states.py` / `src/ui/login_state.py`)
+- Sci-fi glassmorphic auth panel with parallax starfield.
+- Dual-mode tabs (`[LOG IN]` vs `[REGISTER]`) and quick `[PLAY AS GUEST]` button.
+- Validation checks (empty field warning, min length, password match check) with animated color-coded status banner.
+- Audio cues (typing clicks, focus change swoosh, submit chime, error buzz).
+
+#### 3. Game Coordinator & Navigation
+- `Game.current_user` session state dictionary.
+- Main menu active pilot display banner and login/profile switch entry point.
+

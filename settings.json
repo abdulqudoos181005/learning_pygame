@@ -8,7 +8,7 @@
     "fullscreen": false,
     "screen_flash": true,
     "hull": "interceptor",
-    "color": "orange",
+    "color": "blue",
     "keybinds": {
         "up": "w",
         "down": "s",
