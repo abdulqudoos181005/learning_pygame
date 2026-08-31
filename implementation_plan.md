@@ -1250,4 +1250,30 @@ Sprint 13 introduces multi-user accounts, persistent database storage, and user-
 - Top-10 global & user-filtered score queries.
 - User-scoped 3-star rating and level progression storage.
 
+---
+
+### Phase 3: Final Integration & Data Connection (Detailed Plan)
+
+#### 1. Save System Bridge & Data Routing (`src/save_system.py`)
+- Integrate SQLite `DatabaseManager` into `SaveSystem`.
+- User-scoped saves for registered accounts with seamless fallback to local JSON for guests/offline mode.
+- Progression isolation: Each registered pilot maintains their own unlocked levels, stars, and high scores.
+
+#### 2. Game Coordinator & Session Management (`src/game.py`)
+- `game.current_user` session state tracking (`id`, `username`, `is_guest`).
+- Boot into `LoginState` or auto-resume last logged-in pilot.
+- `game.logout()` helper to reset session and switch pilots.
+
+#### 3. Login State Hookup (`src/ui/login_state.py`)
+- Wire `[LOG IN]` -> `AuthService.authenticate_user()`.
+- Wire `[CREATE PILOT]` -> `AuthService.register_user()`.
+- Wire `[PLAY AS GUEST]` -> Quick start guest session without credentials.
+- Animated emerald success / crimson error banners and audio feedback.
+
+#### 4. Menu & Game States Polish (`src/states.py`)
+- **`MenuState`**: Sci-Fi Pilot Profile Card in top header (`PILOT: <NAME>`, status indicator) + `[SWITCH PILOT]` menu action.
+- **`HighScoresState`**: Tabbed views for `[GLOBAL TOP 10]` vs `[MY BEST SCORES]`.
+- **`GameOverState`**: Auto-populated pilot name and automatic DB score commitment.
+
+
 
