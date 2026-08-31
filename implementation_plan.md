@@ -1231,3 +1231,23 @@ Sprint 13 introduces multi-user accounts, persistent database storage, and user-
 - `Game.current_user` session state dictionary.
 - Main menu active pilot display banner and login/profile switch entry point.
 
+---
+
+### Phase 2: Database & Backend Engine (Detailed Plan)
+
+#### 1. Zero-Dependency Database Engine (`src/db/manager.py`)
+- SQLite3 standard library storage at `data/game_data.db`.
+- Schema initialization: `users`, `scores`, and `campaign_progress` tables with foreign keys and WAL mode.
+- Context manager `get_connection()` for safe query executions.
+
+#### 2. Authentication & Cryptography Service (`src/db/auth_service.py`)
+- PBKDF2-HMAC-SHA256 password hashing (100,000 iterations + 16-byte random salt).
+- Constant-time password verification (`hmac.compare_digest`).
+- User registration, credential verification, and profile management with input validation.
+
+#### 3. Scores & Progression Repositories (`src/db/score_repository.py`, `src/db/progress_repository.py`)
+- Arcade leaderboard score recording with loadout attributes (`hull`, `color`).
+- Top-10 global & user-filtered score queries.
+- User-scoped 3-star rating and level progression storage.
+
+
