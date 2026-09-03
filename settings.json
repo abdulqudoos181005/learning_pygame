@@ -5,10 +5,10 @@
     "shake_intensity": 1.0,
     "bloom": true,
     "hitmarkers": true,
-    "fullscreen": false,
+    "fullscreen": true,
     "screen_flash": true,
-    "hull": "interceptor",
-    "color": "blue",
+    "hull": "cruiser",
+    "color": "green",
     "keybinds": {
         "up": "w",
         "down": "s",
