@@ -74,7 +74,17 @@ class Game:
         # Fullscreen state
         self.fullscreen = bool(self.settings.get("fullscreen", False))
         if self.fullscreen:
-            self.screen = pg.display.set_mode((self.width, self.height), pg.FULLSCREEN)
+            try:
+                self.screen = pg.display.set_mode((self.width, self.height), pg.FULLSCREEN)
+            except Exception:
+                self.screen = pg.display.set_mode((self.width, self.height))
+
+        # Sprint 13 / Phase 1: User Session Management
+        self.current_user = {
+            "id": None,
+            "username": "Guest Pilot",
+            "is_guest": True,
+        }
 
         # Initialize starting state (MenuState) using the State Design Pattern.
         self.state = MenuState(self)
@@ -89,6 +99,21 @@ class Game:
             "missile_capacity": 0,    # bonus starting missiles
             "shield_regen_rate": 0.0, # shield points regenerated per second (passive)
         }
+
+    def set_user(self, user_dict):
+        """Sets the active pilot user session dictionary."""
+        if isinstance(user_dict, dict):
+            self.current_user = user_dict
+        else:
+            self.current_user = {"id": None, "username": "Guest Pilot", "is_guest": True}
+
+    def logout(self):
+        """Resets current user session to Guest Pilot."""
+        self.current_user = {"id": None, "username": "Guest Pilot", "is_guest": True}
+
+    def is_logged_in(self) -> bool:
+        """Returns True if current session belongs to an authenticated non-guest pilot."""
+        return bool(self.current_user and not self.current_user.get("is_guest", True))
 
     def toggle_fullscreen(self):
         """Toggles fullscreen display mode without destroying assets."""

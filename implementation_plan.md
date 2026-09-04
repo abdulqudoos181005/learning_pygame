@@ -1208,28 +1208,28 @@ Sprint 12 is a UI/UX and polish sprint, so the primary risks are aesthetic and e
 Sprint 13 introduces multi-user accounts, persistent database storage, and user-scoped score/progression tracking.
 
 ### 3-Phase Roadmap
-- **Phase 1: Login & Registration Page (Auth UI & State)** *(Current Focus)*
-- **Phase 2: Database & Backend Engine (SQLite, Schema, Hashing & CRUD)**
+- **Phase 1: Login & Registration Page (Auth UI & State)** — ✅ COMPLETE
+- **Phase 2: Database & Backend Engine (SQLite, Schema, Hashing & CRUD)** *(Next Focus)*
 - **Phase 3: Final Integration & Data Connection (Session Management, User-Scoped Leaderboards & Saves)**
 
 ---
 
-### Phase 1: Login & Registration Page (Detailed Plan)
+### Phase 1: Login & Registration Page — ✅ COMPLETE
 
-#### 1. Interactive Text Field Component (`src/ui/text_input.py`)
+#### 1. Interactive Text Field Component (`src/ui/text_input.py`) — ✅ DONE
 - Reusable text box widget with focus glow, pulsing caret, and placeholder support.
 - Password masking (`••••••`) with show/hide toggle.
-- Full keyboard support (alphanumeric input, backspace hold-repeat, max character limit).
+- Full keyboard support (alphanumeric input, backspace hold-repeat, max character limit, clipboard paste).
 
-#### 2. Auth State (`LoginState` in `src/states.py` / `src/ui/login_state.py`)
+#### 2. Auth State (`LoginState` in `src/ui/login_state.py` & `src/states.py`) — ✅ DONE
 - Sci-fi glassmorphic auth panel with parallax starfield.
 - Dual-mode tabs (`[LOG IN]` vs `[REGISTER]`) and quick `[PLAY AS GUEST]` button.
-- Validation checks (empty field warning, min length, password match check) with animated color-coded status banner.
+- Client-side validation checks (empty field warning, min length, password match check) with animated color-coded status banner.
 - Audio cues (typing clicks, focus change swoosh, submit chime, error buzz).
 
-#### 3. Game Coordinator & Navigation
-- `Game.current_user` session state dictionary.
-- Main menu active pilot display banner and login/profile switch entry point.
+#### 3. Game Coordinator & Navigation — ✅ DONE
+- `Game.current_user` session state dictionary with `set_user()`, `logout()`, `is_logged_in()`.
+- Main menu active pilot display banner (`PILOT: <NAME>`, status indicator) and login/profile switch entry point.
 
 ---
 

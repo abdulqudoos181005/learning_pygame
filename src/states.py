@@ -10,9 +10,8 @@ from world.environment import SpaceEnvironment
 from render.camera import Camera
 from render.pipeline import RenderPipeline
 from ui.hud import HUD
-
-
 from ui.tooltip import UITooltipManager
+from ui.login_state import LoginState
 
 
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
@@ -143,6 +142,10 @@ class MenuState(State):
             ("HALL OF FAME", "View local top-10 high scores and pilot loadout achievements."),
             ("QUIT GAME", "Safely exit the Space Shooters application to desktop.")
         ]
+
+        # Sprint 13 / Phase 1: Interactive Pilot Profile Banner
+        self.pilot_badge_rect = pg.Rect(self.game.width - 290, 20, 270, 42)
+        self.hovered_pilot_badge = False
         
         # Play menu music bed
         if hasattr(self.game, "audio"):
@@ -160,6 +163,7 @@ class MenuState(State):
 
         for event in events:
             if event.type == pg.MOUSEMOTION:
+                self.hovered_pilot_badge = self.pilot_badge_rect.collidepoint(event.pos)
                 mouse_hover = None
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
@@ -173,6 +177,11 @@ class MenuState(State):
                             self.game.audio.play_ui_hover()
 
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if self.pilot_badge_rect.collidepoint(event.pos):
+                    self.game.audio.play_ui_click()
+                    self.game.change_state(LoginState(self.game, return_state=self))
+                    return
+
                 for idx, button in enumerate(self.buttons):
                     if button["rect"].collidepoint(event.pos):
                         self.selected_index = idx
@@ -180,6 +189,12 @@ class MenuState(State):
                         self.click_timer = 0.08
                         self.game.audio.play_ui_click()
                         return
+
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_p, pg.K_l):
+                    self.game.audio.play_ui_click()
+                    self.game.change_state(LoginState(self.game, return_state=self))
+                    return
 
         # Device-agnostic InputMap navigation (Keyboard / Gamepad)
         if self.game.input.is_pressed("up"):
@@ -228,11 +243,17 @@ class MenuState(State):
                 self._select_option(action_idx)
 
         # Update cursor hover state
-        is_any_hovered = (self.hovered_index is not None)
+        is_any_hovered = (self.hovered_index is not None or self.hovered_pilot_badge)
         self.game.cursor.set_hover_state(is_any_hovered)
 
         # Update tooltips
-        if self.hovered_index is not None and 0 <= self.hovered_index < len(self.tooltips):
+        if self.hovered_pilot_badge:
+            self.game.tooltip.set_tooltip(
+                "PILOT PROFILE",
+                "Click to authenticate, register a callsign, or switch active pilot profile.",
+                (self.pilot_badge_rect.left, self.pilot_badge_rect.bottom + 4)
+            )
+        elif self.hovered_index is not None and 0 <= self.hovered_index < len(self.tooltips):
             title, body = self.tooltips[self.hovered_index]
             rect = self.buttons[self.hovered_index]["rect"]
             self.game.tooltip.set_tooltip(title, body, (rect.right, rect.top))
@@ -268,6 +289,37 @@ class MenuState(State):
                 pulse=self.anim_timer * 8 + idx,
                 danger=is_danger,
             )
+
+        # Sprint 13 / Phase 1: Draw Pilot Profile Header Badge
+        user = getattr(self.game, "current_user", {"username": "Guest Pilot", "is_guest": True})
+        username = user.get("username", "Guest Pilot")
+        is_guest = user.get("is_guest", True)
+
+        badge_surf = pg.Surface((self.pilot_badge_rect.width, self.pilot_badge_rect.height), pg.SRCALPHA)
+        if self.hovered_pilot_badge:
+            badge_fill = (26, 45, 70, 230)
+            badge_border = (0, 255, 220, 255)
+        else:
+            badge_fill = (16, 26, 42, 190)
+            badge_border = (60, 90, 130, 200)
+
+        badge_surf.fill(badge_fill)
+        pg.draw.rect(badge_surf, badge_border, badge_surf.get_rect(), 1, border_radius=8)
+        screen.blit(badge_surf, self.pilot_badge_rect)
+
+        # Status pulse indicator dot
+        dot_pulse = 0.5 + 0.5 * math.sin(self.anim_timer * 5.0)
+        dot_color = (50, 255, 150) if not is_guest else (0, 200, 255)
+        dot_pos = (self.pilot_badge_rect.x + 16, self.pilot_badge_rect.centery)
+        pg.draw.circle(screen, dot_color, dot_pos, 4)
+
+        # Pilot label & action
+        action_tag = "[LOGIN]" if is_guest else "[SWITCH]"
+        label_text = f"{username[:14]} {action_tag}"
+        tag_color = (0, 255, 220) if self.hovered_pilot_badge else (200, 225, 245)
+        txt_surf = self.game.assets.hud_font.render(label_text, True, tag_color)
+        txt_rect = txt_surf.get_rect(midleft=(self.pilot_badge_rect.x + 28, self.pilot_badge_rect.centery))
+        screen.blit(txt_surf, txt_rect)
 
 
 
