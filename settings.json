@@ -7,8 +7,8 @@
     "hitmarkers": true,
     "fullscreen": true,
     "screen_flash": true,
-    "hull": "cruiser",
-    "color": "green",
+    "hull": "vanguard",
+    "color": "blue",
     "keybinds": {
         "up": "w",
         "down": "s",
