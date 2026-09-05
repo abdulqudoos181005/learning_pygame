@@ -79,6 +79,16 @@ class Game:
             except Exception:
                 self.screen = pg.display.set_mode((self.width, self.height))
 
+        # Sprint 13 / Phase 2: Database Engine & Backend Repositories
+        from db.manager import DatabaseManager
+        from db.auth_service import AuthService
+        from db.score_repository import ScoreRepository
+        from db.progress_repository import ProgressRepository
+        self.db = DatabaseManager()
+        self.auth_service = AuthService(self.db)
+        self.score_repo = ScoreRepository(self.db)
+        self.progress_repo = ProgressRepository(self.db)
+
         # Sprint 13 / Phase 1: User Session Management
         self.current_user = {
             "id": None,

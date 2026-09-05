@@ -12,18 +12,25 @@ class DatabaseManager:
     """
 
     def __init__(self, db_path: str = None):
+        self._mem_anchor = None
+        self.is_memory = False
+
         if db_path is None:
             # Default to data/game_data.db under project root
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             data_dir = os.path.join(project_root, "data")
             os.makedirs(data_dir, exist_ok=True)
             self.db_path = os.path.join(data_dir, "game_data.db")
+        elif db_path == ":memory:" or db_path.startswith("file:"):
+            self.is_memory = True
+            self.db_path = f"file:mem_{id(self)}?mode=memory&cache=shared"
+            # Keep an anchor connection alive so shared in-memory DB persists
+            self._mem_anchor = sqlite3.connect(self.db_path, uri=True)
         else:
             self.db_path = db_path
-            if db_path != ":memory:":
-                parent_dir = os.path.dirname(db_path)
-                if parent_dir:
-                    os.makedirs(parent_dir, exist_ok=True)
+            parent_dir = os.path.dirname(db_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
 
         self._init_schema()
 
@@ -33,11 +40,15 @@ class DatabaseManager:
         Yields an active SQLite connection with row factory, foreign keys enabled,
         and transaction management (auto-commits on success, rolls back on error).
         """
-        conn = sqlite3.connect(self.db_path)
+        if self.is_memory:
+            conn = sqlite3.connect(self.db_path, uri=True)
+        else:
+            conn = sqlite3.connect(self.db_path)
+
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("PRAGMA foreign_keys = ON;")
-            if self.db_path != ":memory:":
+            if not self.is_memory:
                 conn.execute("PRAGMA journal_mode = WAL;")
             yield conn
             conn.commit()

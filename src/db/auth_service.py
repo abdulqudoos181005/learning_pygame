@@ -92,9 +92,10 @@ class AuthService:
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
+                now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 cursor.execute(
                     "INSERT INTO users (username, password_hash, salt, last_login) VALUES (?, ?, ?, ?)",
-                    (clean_username, pwd_hash, salt, datetime.datetime.utcnow().isoformat()),
+                    (clean_username, pwd_hash, salt, now_iso),
                 )
                 user_id = cursor.lastrowid
 
@@ -148,7 +149,7 @@ class AuthService:
                 return None, "Invalid security passcode."
 
             # Update last_login timestamp
-            now_iso = datetime.datetime.utcnow().isoformat()
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
             cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (now_iso, user_id))
 
             return {
