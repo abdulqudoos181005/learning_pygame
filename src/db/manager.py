@@ -34,6 +34,18 @@ class DatabaseManager:
 
         self._init_schema()
 
+    def close(self):
+        """Closes any persistent memory anchor connections."""
+        if self._mem_anchor:
+            try:
+                self._mem_anchor.close()
+            except Exception:
+                pass
+            self._mem_anchor = None
+
+    def __del__(self):
+        self.close()
+
     @contextmanager
     def get_connection(self):
         """

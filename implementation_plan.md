@@ -1209,8 +1209,8 @@ Sprint 13 introduces multi-user accounts, persistent database storage, and user-
 
 ### 3-Phase Roadmap
 - **Phase 1: Login & Registration Page (Auth UI & State)** — ✅ COMPLETE
-- **Phase 2: Database & Backend Engine (SQLite, Schema, Hashing & CRUD)** *(Next Focus)*
-- **Phase 3: Final Integration & Data Connection (Session Management, User-Scoped Leaderboards & Saves)**
+- **Phase 2: Database & Backend Engine (SQLite, Schema, Hashing & CRUD)** — ✅ COMPLETE
+- **Phase 3: Final Integration & Data Connection (Session Management, User-Scoped Leaderboards & Saves)** *(Next Focus)*
 
 ---
 
@@ -1233,19 +1233,19 @@ Sprint 13 introduces multi-user accounts, persistent database storage, and user-
 
 ---
 
-### Phase 2: Database & Backend Engine (Detailed Plan)
+### Phase 2: Database & Backend Engine — ✅ COMPLETE
 
-#### 1. Zero-Dependency Database Engine (`src/db/manager.py`)
-- SQLite3 standard library storage at `data/game_data.db`.
+#### 1. Zero-Dependency Database Engine (`src/db/manager.py`) — ✅ DONE
+- SQLite3 standard library storage at `data/game_data.db` (and support for in-memory DBs for testing).
 - Schema initialization: `users`, `scores`, and `campaign_progress` tables with foreign keys and WAL mode.
 - Context manager `get_connection()` for safe query executions.
 
-#### 2. Authentication & Cryptography Service (`src/db/auth_service.py`)
+#### 2. Authentication & Cryptography Service (`src/db/auth_service.py`) — ✅ DONE
 - PBKDF2-HMAC-SHA256 password hashing (100,000 iterations + 16-byte random salt).
 - Constant-time password verification (`hmac.compare_digest`).
 - User registration, credential verification, and profile management with input validation.
 
-#### 3. Scores & Progression Repositories (`src/db/score_repository.py`, `src/db/progress_repository.py`)
+#### 3. Scores & Progression Repositories (`src/db/score_repository.py`, `src/db/progress_repository.py`) — ✅ DONE
 - Arcade leaderboard score recording with loadout attributes (`hull`, `color`).
 - Top-10 global & user-filtered score queries.
 - User-scoped 3-star rating and level progression storage.
