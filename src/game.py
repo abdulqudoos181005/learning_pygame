@@ -42,9 +42,23 @@ class Game:
         from audio.director import AudioDirector
         self.audio = AudioDirector(assets=self.assets, screen_width=self.width)
         
-        # Save System & persistent player loadout & settings
+        # Sprint 13 / Phase 2: Database Engine & Backend Repositories
+        from db.manager import DatabaseManager
+        from db.auth_service import AuthService
+        from db.score_repository import ScoreRepository
+        from db.progress_repository import ProgressRepository
+        self.db = DatabaseManager()
+        self.auth_service = AuthService(self.db)
+        self.score_repo = ScoreRepository(self.db)
+        self.progress_repo = ProgressRepository(self.db)
+
+        # Save System & persistent player loadout & settings (connected to database)
         from save_system import SaveSystem
-        self.save_system = SaveSystem()
+        self.save_system = SaveSystem(
+            db_manager=self.db,
+            score_repo=self.score_repo,
+            progress_repo=self.progress_repo,
+        )
         self.settings = self.save_system.load_settings()
         self.loadout = self.save_system.load_loadout()
 
@@ -78,16 +92,6 @@ class Game:
                 self.screen = pg.display.set_mode((self.width, self.height), pg.FULLSCREEN)
             except Exception:
                 self.screen = pg.display.set_mode((self.width, self.height))
-
-        # Sprint 13 / Phase 2: Database Engine & Backend Repositories
-        from db.manager import DatabaseManager
-        from db.auth_service import AuthService
-        from db.score_repository import ScoreRepository
-        from db.progress_repository import ProgressRepository
-        self.db = DatabaseManager()
-        self.auth_service = AuthService(self.db)
-        self.score_repo = ScoreRepository(self.db)
-        self.progress_repo = ProgressRepository(self.db)
 
         # Sprint 13 / Phase 1: User Session Management
         self.current_user = {
