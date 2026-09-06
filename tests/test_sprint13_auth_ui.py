@@ -146,7 +146,11 @@ class TestSprint13AuthUI(unittest.TestCase):
 
     def test_login_state_validation_and_tabs(self):
         """Tests tab switching and client-side validation logic in LoginState."""
+        from db.manager import DatabaseManager
+        from db.auth_service import AuthService
         game = Game()
+        game.db = DatabaseManager(":memory:")
+        game.auth_service = AuthService(game.db)
         login_state = LoginState(game)
 
         # 1. Check default state is 'login' tab
