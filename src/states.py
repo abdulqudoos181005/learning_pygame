@@ -1286,7 +1286,8 @@ class LevelSelectState(State):
         super().__init__(game)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=100)
         self.save_system = getattr(self.game, 'save_system', SaveSystem())
-        self.progress = self.save_system.load_progress()
+        user_id = self.game.current_user.get("id") if (hasattr(self.game, "is_logged_in") and self.game.is_logged_in()) else None
+        self.progress = self.save_system.load_progress(user_id=user_id)
         self.hovered_index = None
         self.selected_index = 0
         self.buttons = []
@@ -2335,8 +2336,15 @@ class GameOverState(State):
             self.game.audio.play_sfx("game_over", volume_mult=1.0)
         elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("game_over").play()
-        self.save_system = SaveSystem()
-        self.player_name = ""
+        self.save_system = getattr(self.game, 'save_system', SaveSystem())
+        
+        # Auto-populate name if logged in
+        user = getattr(self.game, "current_user", {})
+        if hasattr(self.game, "is_logged_in") and self.game.is_logged_in():
+            self.player_name = str(user.get("username", ""))[:8].upper()
+        else:
+            self.player_name = ""
+
         self.save_rect = pg.Rect(self.game.width // 2 - 135, self.game.height // 2 + 110, 270, 52)
         self.save_hovered = False
         
@@ -2349,9 +2357,10 @@ class GameOverState(State):
         loadout = getattr(self.game, 'loadout', {})
         hull = loadout.get("hull", "interceptor")
         color = loadout.get("color", "blue")
+        user_id = self.game.current_user.get("id") if (hasattr(self.game, "is_logged_in") and self.game.is_logged_in()) else None
         if hasattr(self.game, 'audio') and self.game.audio:
             self.game.audio.play_ui_click()
-        self.save_system.save_score(final_name, self.score, hull=hull, color=color)
+        self.save_system.save_score(final_name, self.score, hull=hull, color=color, user_id=user_id)
         self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
@@ -2987,7 +2996,8 @@ class LevelCompleteState(State):
 
         # Save progress to save system
         self.save_system = getattr(self.game, 'save_system', SaveSystem())
-        self.save_system.save_progress(self.cleared_level, stars=self.stars, score=self.score)
+        user_id = self.game.current_user.get("id") if (hasattr(self.game, "is_logged_in") and self.game.is_logged_in()) else None
+        self.save_system.save_progress(self.cleared_level, stars=self.stars, score=self.score, user_id=user_id)
 
     def _continue(self):
         if self.transition_locked:
@@ -3065,7 +3075,7 @@ class GameCompleteState(State):
     def __init__(self, game, score):
         super().__init__(game)
         self.score = score
-        self.save_system = SaveSystem()
+        self.save_system = getattr(self.game, 'save_system', SaveSystem())
         self.starfield   = Starfield(self.game.width, self.game.height, num_stars=150)
         self.timer       = 0.0   # Used for animation
         self.continue_rect = pg.Rect(self.game.width // 2 - 150, self.game.height - 120, 300, 50)
@@ -3081,7 +3091,9 @@ class GameCompleteState(State):
         loadout = getattr(self.game, 'loadout', {})
         hull = loadout.get("hull", "interceptor")
         color = loadout.get("color", "blue")
-        self.save_system.save_score("VICTOR", self.score, hull=hull, color=color)
+        user_id = self.game.current_user.get("id") if (hasattr(self.game, "is_logged_in") and self.game.is_logged_in()) else None
+        name = str(self.game.current_user.get("username", "VICTOR"))[:8].upper() if (hasattr(self.game, "is_logged_in") and self.game.is_logged_in()) else "VICTOR"
+        self.save_system.save_score(name, self.score, hull=hull, color=color, user_id=user_id)
         self.game.change_state(HighScoresState(self.game))
 
     def handle_events(self, events):
@@ -3137,21 +3149,54 @@ class GameCompleteState(State):
 
 
 class HighScoresState(State):
-    """Sprint 9 & 12 — Leaderboard Listing with Trophy Badges, Loadout Icons, and InputMap navigation."""
+    """Sprint 9, 12 & 13 — Dual-Tab Leaderboard (Global Top 10 vs User-Scoped Career Best)."""
     def __init__(self, game):
         super().__init__(game)
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=90)
         self.save_system = getattr(self.game, 'save_system', SaveSystem())
-        self.scores_list = self.save_system.load_scores()
+        
+        # Dual-Tab State
+        self.active_tab = "global"  # "global" or "my_scores"
+        self.tab_global_rect = pg.Rect(self.game.width // 2 - 215, 115, 205, 36)
+        self.tab_my_rect = pg.Rect(self.game.width // 2 + 10, 115, 205, 36)
+        self.hovered_tab_global = False
+        self.hovered_tab_my = False
+        
+        # Action Buttons
         self.back_rect = pg.Rect(40, 40, 120, 48)
         self.back_hovered = False
+        self.login_btn_rect = pg.Rect(self.game.width // 2 - 130, 390, 260, 46)
+        self.login_btn_hovered = False
+        
         self.anim_timer = 0.0
+        self.scores_list = []
+        self._refresh_scores()
+
+    def _refresh_scores(self):
+        """Loads scores depending on the active tab and authentication status."""
+        if self.active_tab == "global":
+            self.scores_list = self.save_system.load_scores()
+        else:
+            is_logged_in = hasattr(self.game, "is_logged_in") and self.game.is_logged_in()
+            user_id = self.game.current_user.get("id") if is_logged_in else None
+            if user_id:
+                self.scores_list = self.save_system.load_scores(user_id=user_id)
+            else:
+                self.scores_list = []
 
     def handle_events(self, events):
-        """Allows returning back to Main Menu with mouse, keyboard, or gamepad."""
+        """Allows returning to Main Menu and switching tabs with mouse, keyboard, or gamepad."""
         for event in events:
             if event.type == pg.MOUSEMOTION:
                 self.back_hovered = self.back_rect.collidepoint(event.pos)
+                self.hovered_tab_global = self.tab_global_rect.collidepoint(event.pos)
+                self.hovered_tab_my = self.tab_my_rect.collidepoint(event.pos)
+                is_guest = not (hasattr(self.game, "is_logged_in") and self.game.is_logged_in())
+                if self.active_tab == "my_scores" and is_guest:
+                    self.login_btn_hovered = self.login_btn_rect.collidepoint(event.pos)
+                else:
+                    self.login_btn_hovered = False
+
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 if self.back_rect.collidepoint(event.pos):
                     if hasattr(self.game, 'audio') and self.game.audio:
@@ -3159,7 +3204,42 @@ class HighScoresState(State):
                     self.game.change_state(MenuState(self.game))
                     return
 
-        if self.game.input.is_pressed("cancel") or self.game.input.is_pressed("confirm"):
+                if self.tab_global_rect.collidepoint(event.pos) and self.active_tab != "global":
+                    self.active_tab = "global"
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_hover()
+                    self._refresh_scores()
+                    return
+
+                if self.tab_my_rect.collidepoint(event.pos) and self.active_tab != "my_scores":
+                    self.active_tab = "my_scores"
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_hover()
+                    self._refresh_scores()
+                    return
+
+                is_guest = not (hasattr(self.game, "is_logged_in") and self.game.is_logged_in())
+                if self.active_tab == "my_scores" and is_guest and self.login_btn_rect.collidepoint(event.pos):
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_click()
+                    self.game.change_state(LoginState(self.game, return_state=self))
+                    return
+
+            elif event.type == pg.KEYDOWN:
+                if event.key in (pg.K_LEFT, pg.K_RIGHT, pg.K_TAB):
+                    self.active_tab = "my_scores" if self.active_tab == "global" else "global"
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_ui_hover()
+                    self._refresh_scores()
+                    return
+
+        # InputMap navigation
+        if self.game.input.is_pressed("left") or self.game.input.is_pressed("right"):
+            self.active_tab = "my_scores" if self.active_tab == "global" else "global"
+            if hasattr(self.game, 'audio') and self.game.audio:
+                self.game.audio.play_ui_hover()
+            self._refresh_scores()
+        elif self.game.input.is_pressed("cancel"):
             if hasattr(self.game, 'audio') and self.game.audio:
                 self.game.audio.play_ui_back()
             self.game.change_state(MenuState(self.game))
@@ -3167,7 +3247,8 @@ class HighScoresState(State):
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
-        self.game.cursor.set_hover_state(self.back_hovered)
+        is_hovered = self.back_hovered or self.hovered_tab_global or self.hovered_tab_my or self.login_btn_hovered
+        self.game.cursor.set_hover_state(is_hovered)
         self.game.tooltip.clear()
 
     def draw(self, screen):
@@ -3176,11 +3257,11 @@ class HighScoresState(State):
         
         # Leaderboard Header Title
         title = self.game.assets.title_font.render("HALL OF FAME", True, (0, 240, 255))
-        title_rect = title.get_rect(center=(self.game.width // 2, 75))
+        title_rect = title.get_rect(center=(self.game.width // 2, 52))
         screen.blit(title, title_rect)
 
-        sub_title = self.game.assets.hud_font.render("TOP PILOT RECORDS & STARSHIP LOADOUT ACHIEVEMENTS", True, (160, 190, 220))
-        screen.blit(sub_title, sub_title.get_rect(center=(self.game.width // 2, 112)))
+        sub_title = self.game.assets.hud_font.render("ARCADE HIGH SCORES & STARSHIP COMBAT LOGS", True, (160, 190, 220))
+        screen.blit(sub_title, sub_title.get_rect(center=(self.game.width // 2, 84)))
 
         _draw_ui_button(
             screen,
@@ -3194,12 +3275,76 @@ class HighScoresState(State):
             pulse=self.anim_timer * 8,
         )
 
+        # Tab 1: Global Leaderboard
+        is_glob_active = (self.active_tab == "global")
+        _draw_ui_button(
+            screen,
+            self.tab_global_rect,
+            "🏆 GLOBAL TOP 10",
+            self.game.assets.hud_font,
+            hovered=self.hovered_tab_global or is_glob_active,
+            fill=(30, 60, 90, 240) if is_glob_active else (18, 26, 40, 190),
+            border=(0, 255, 220, 255) if is_glob_active else (60, 85, 115, 200),
+            text_color=(0, 255, 220) if is_glob_active else (140, 170, 200),
+        )
+
+        # Tab 2: My Career Best
+        is_my_active = (self.active_tab == "my_scores")
+        _draw_ui_button(
+            screen,
+            self.tab_my_rect,
+            "⭐ MY BEST SCORES",
+            self.game.assets.hud_font,
+            hovered=self.hovered_tab_my or is_my_active,
+            fill=(30, 60, 90, 240) if is_my_active else (18, 26, 40, 190),
+            border=(0, 255, 220, 255) if is_my_active else (60, 85, 115, 200),
+            text_color=(0, 255, 220) if is_my_active else (140, 170, 200),
+        )
+
         # Table Container Panel
-        table_rect = pg.Rect(self.game.width // 2 - 340, 150, 680, 510)
+        table_rect = pg.Rect(self.game.width // 2 - 340, 160, 680, 505)
         table_panel = pg.Surface((table_rect.width, table_rect.height), pg.SRCALPHA)
         table_panel.fill((16, 24, 40, 225))
         pg.draw.rect(table_panel, (0, 220, 255, 200), table_panel.get_rect(), 2, border_radius=12)
         screen.blit(table_panel, table_rect)
+
+        is_logged_in = hasattr(self.game, "is_logged_in") and self.game.is_logged_in()
+        user = getattr(self.game, "current_user", {})
+
+        # If on "My Best Scores" tab and user is Guest
+        if self.active_tab == "my_scores" and not is_logged_in:
+            g_title = self.game.assets.font.render("GUEST PILOT SESSION ACTIVE", True, (255, 200, 80))
+            g_title_rect = g_title.get_rect(center=(table_rect.centerx, table_rect.y + 110))
+            screen.blit(g_title, g_title_rect)
+
+            msg1 = self.game.assets.hud_font.render("Log in or register a pilot profile to track your personal career", True, (180, 210, 235))
+            msg2 = self.game.assets.hud_font.render("high scores, star ratings, and starship loadout achievements!", True, (180, 210, 235))
+            screen.blit(msg1, msg1.get_rect(center=(table_rect.centerx, table_rect.y + 160)))
+            screen.blit(msg2, msg2.get_rect(center=(table_rect.centerx, table_rect.y + 190)))
+
+            _draw_ui_button(
+                screen,
+                self.login_btn_rect,
+                "🚀 AUTHENTICATE PILOT",
+                self.game.assets.font,
+                hovered=self.login_btn_hovered,
+                fill=(20, 60, 85, 230),
+                border=(0, 255, 220, 255) if self.login_btn_hovered else (0, 200, 180, 220),
+                text_color=(0, 255, 220) if self.login_btn_hovered else (200, 245, 255),
+                pulse=self.anim_timer * 6.0,
+            )
+            return
+
+        # If on "My Best Scores" tab and user is logged in with no scores
+        if self.active_tab == "my_scores" and is_logged_in and not self.scores_list:
+            pilot_name = user.get("username", "PILOT").upper()
+            empty_title = self.game.assets.font.render(f"PILOT: {pilot_name}", True, (0, 255, 200))
+            empty_msg = self.game.assets.hud_font.render("NO RECORDED SCORES FOUND FOR THIS ACCOUNT YET.", True, (160, 190, 220))
+            hint_msg = self.game.assets.hud_font.render("Deploy on campaign missions to establish your combat record!", True, (140, 170, 200))
+            screen.blit(empty_title, empty_title.get_rect(center=(table_rect.centerx, table_rect.y + 160)))
+            screen.blit(empty_msg, empty_msg.get_rect(center=(table_rect.centerx, table_rect.y + 210)))
+            screen.blit(hint_msg, hint_msg.get_rect(center=(table_rect.centerx, table_rect.y + 245)))
+            return
 
         # Column Header
         h_rank = self.game.assets.hud_font.render("RANK", True, (0, 255, 220))
@@ -3215,7 +3360,7 @@ class HighScoresState(State):
         # Rows
         trophies = ["🥇", "🥈", "🥉"]
         for idx, item in enumerate(self.scores_list[:10]):
-            y_pos = table_rect.y + 60 + idx * 42
+            y_pos = table_rect.y + 58 + idx * 42
 
             # Trophy / Rank Label
             if idx < 3:
@@ -3225,7 +3370,7 @@ class HighScoresState(State):
                 rank_str = f"{idx+1}."
                 color = (150, 180, 210)
 
-            name = item.get("name", "PILOT")
+            name = item.get("name", item.get("username", "PILOT"))
             score = str(item.get("score", 0))
             hull = item.get("hull", "interceptor")
             hull_color = item.get("color", "blue")
