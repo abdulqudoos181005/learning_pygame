@@ -1,5 +1,5 @@
 {
-    "music_volume": 0.4357142857142857,
+    "music_volume": 0.6,
     "sfx_volume": 0.4357142857142857,
     "ui_volume": 0.5392857142857143,
     "shake_intensity": 1.0,
@@ -8,7 +8,7 @@
     "fullscreen": true,
     "screen_flash": true,
     "hull": "vanguard",
-    "color": "blue",
+    "color": "red",
     "keybinds": {
         "up": "w",
         "down": "s",

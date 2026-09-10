@@ -1293,5 +1293,125 @@ Sprint 13 introduces multi-user accounts, persistent database storage, and user-
   - `test_high_scores_state_dual_tabs_and_guest_prompt` — Dual tabs (`GLOBAL` vs `MY BEST SCORES`) and guest login prompts.
 - All 56 automated unit tests across the test suite pass with 0 errors and 0 failures.
 
+---
+
+## Sprint 14 — Combat Evolution, Multi-Phase Bosses & Tactical Systems
+
+Sprint 14 elevates core moment-to-moment combat gameplay from a classic shooter into a dynamic, high-stakes tactical shmup. It introduces multi-phase telegraphed boss battles, distinct elite enemy archetypes, an Overdrive / EMP ultimate ability, bullet-grazing mechanics, and deep combat feedback.
+
+### 3-Phase Roadmap
+
+```mermaid
+graph TD
+    subgraph Phase 1: Boss Overhaul & Telegraphing
+        A1[Telegraph System & Warning VFX] --> A2[Level 5 Goliath Dreadnought Refactor]
+        A2 --> A3[Level 10 Apex Void Leviathan Multi-Phase]
+        A3 --> A4[Segmented Boss HUD & Phase Break Animations]
+    end
+
+    subgraph Phase 2: Elite Enemy Archetypes & Wave AI
+        B1[Aegis Defender - Frontal Directional Shield] --> B2[Sniper Skiff - Laser Aim Railgun]
+        B2 --> B3[Phase Phantom - Cloak & Ambush]
+        B3 --> B4[Hive Carrier - Swarm Spawner]
+        B4 --> B5[Level System Wave Configs & Formation Integration]
+    end
+
+    subgraph Phase 3: Tactical Player Mechanics & Combat Juice
+        C1[Graze / Near-Miss Detection System] --> C2[Adrenaline / Overdrive Gauge & EMP Burst]
+        C2 --> C3[Bullet Time Time-Dilation Engine]
+        C3 --> C4[Dynamic Hit-Stop, Screen Flash & Audio Polish]
+    end
+
+    Phase 1 --> Phase 2
+    Phase 2 --> Phase 3
+```
+
+---
+
+### Phase 1: Multi-Phase Boss Battles & Attack Telegraphing
+
+#### 1. Visual Telegraphing & Area Hazard System (`src/vfx/telegraph.py` & `src/render/pipeline.py`)
+- **Laser Aiming Sightlines:**
+  - Pulsing semi-transparent laser guide lines that track player position before locking and firing lethal beam cannons.
+  - Color gradient: soft warning amber during targeting -> intense flashing red when locked -> instant beam discharge.
+- **Impact Area Warnings:**
+  - Expanding concentric rings and conical hazard sectors indicating incoming mortar/missile strikes or shockwaves.
+- **Phase Transition Blast & Warning Sirens:**
+  - Boss invulnerability frame + EMP pulse clearing player projectiles during phase shifts.
+  - Screen shake and warning audio sirens triggering boss phase notifications (`PHASE 2: ORBITAL SHIELDS ACTIVE`, `PHASE 3: CORE OVERCLOCK`).
+
+#### 2. Boss Encounters Redesign (`src/sprites.py` or `src/boss/`)
+- **Level 5 Boss: *Goliath Dreadnought***
+  - **Phase 1 (Broadside Barrage):** Heavy dual-barrel alternating vulcan fire + twin heat-seeking missile pods.
+  - **Phase 2 (Orbital Bastion):** Generates 2 rotating energy shield bits that deflect front projectiles until destroyed or bypassed.
+  - **Phase 3 (Overclocked Fury):** Faster movement, continuous sweeping conical laser arcs, and proximity fragmentation mines.
+- **Level 10 Final Boss: *Apex Void Leviathan***
+  - **Phase 1 (Void Swarm):** Dual heavy beam sweepers while deploying escort support drones.
+  - **Phase 2 (Danmaku Hellstorm):** Complex geometric bullet patterns (spiral blossoms, ring pulses, criss-cross wave patterns).
+  - **Phase 3 (Supernova Countdown):** Enters core meltdown state; charges a room-clearing Supernova beam with a visible 10-second DPS-check countdown while firing radial homing pulses.
+
+#### 3. Segmented Boss HUD (`src/ui/hud.py`)
+- Redesigned boss health bar spanning the top of the screen:
+  - Phase segments marked by gemstone/pip dividers (Phase 1, 2, 3).
+  - Boss nameplate with animated title banner (e.g., `[ BOSS: APEX VOID LEVIATHAN ]`).
+  - Active shield status overlay (blue armor bar over red health).
+
+---
+
+### Phase 2: Elite Enemy Archetypes & Wave Formations
+
+#### 1. Four New Tactical Enemy Classes (`src/sprites.py`)
+- **`Aegis Defender` (Frontline Barrier Ship):**
+  - High durability ship that deploys a 120-degree frontal energy shield.
+  - Blocks frontal player lasers, forcing player to flank, use missiles, or wait for overheat cycles.
+- **`Sniper Skiff` (Long-Range Railgun):**
+  - Stays at the top perimeter, aims a visible targeting laser at the player for 1.2s, then fires an ultra-fast high-damage railgun slug.
+- **`Phase Phantom` (Stealth Interceptor):**
+  - Features optical cloaking (fades to 15% opacity and cannot be auto-targeted by drones).
+  - Uncloaks suddenly behind or beside the player to deliver rapid shotgun bursts before phasing away.
+- **`Hive Carrier` (Swarm Mothership):**
+  - Heavy armored cruiser that periodically launches 3-4 agile micro-drones (`Swarmer`) that home in on the player.
+
+#### 2. Level Integration & Tactical Formations (`src/level_system.py`)
+- Update `LEVEL_CONFIGS` for Levels 3–10:
+  - Shield walls: Aegis Defenders leading waves of Scouts and Snipers.
+  - Ambush waves: Phase Phantoms decloaking mid-wave.
+  - Carrier assaults: Hive Carriers backing up Stinger squadrons.
+
+---
+
+### Phase 3: Tactical Player Abilities & Combat Juice
+
+#### 1. Adrenaline / Overdrive Ultimate & Bullet Graze (`src/sprites.py`, `src/states.py`)
+- **Graze System (Near-Miss Mechanics):**
+  - Detects enemy bullets passing closely to player hitbox without colliding.
+  - Awards bonus score and rapidly charges the Overdrive meter with a satisfying spark particle effect and soft audio chime.
+- **Overdrive Meter & Activation (Key `F` or `SPACE+M`):**
+  - **EMP Burst:** Clears all standard enemy bullets on screen, converting them into collectible bonus score crystals.
+  - **Bullet Time Dilation:** Slows enemy/bullet movement speed to 50% for 4.0 seconds while the player maintains full movement agility and supercharged firing rate.
+  - Custom UI Overdrive bar next to health/shield in the HUD.
+
+#### 2. Impact Feel & Game Juice (`src/fx.py`, `src/render/pipeline.py`, `src/audio/director.py`)
+- **Hit-Stop (Micro-Freeze):** 1-2 frame freeze on defeating elite enemies or boss phase transitions for punchy tactile impact.
+- **Screen Flash & Chromatic Pulses:** Brief white flash on critical boss damage or EMP activation.
+- **Dynamic Audio Ducking:** Combat sounds duck momentarily during Overdrive activation, replaced by a deep bass hum and ticking clock sound effect.
+
+---
+
+### Verification Plan & Test Strategy
+
+#### Automated Unit & Integration Tests (`tests/test_sprint14_combat.py`)
+- Test telegraph system timers, states, and coordinate math.
+- Test multi-phase boss transitions, health segmentation, and invulnerability windows.
+- Test all 4 new enemy archetypes: Aegis shield deflection, Sniper aim & fire sequence, Phase Phantom cloak toggle, Hive Carrier drone spawning.
+- Test Graze proximity collision logic and Overdrive meter charging.
+- Test Overdrive activation: bullet conversion to crystals, time dilation factor calculation.
+
+#### Manual Verification
+- Play Level 5 to verify Goliath Dreadnought phase 1 -> 2 -> 3 transitions and audio cues.
+- Play Level 10 to verify Apex Void Leviathan Danmaku patterns and Supernova DPS check.
+- Verify Overdrive trigger feel with keyboard (`F`) and graze audio/visual feedback.
+
+
 
 
