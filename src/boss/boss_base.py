@@ -2,7 +2,11 @@
 import math
 import random
 import pygame as pg
-from fx import spawn_sparks, spawn_explosion
+try:
+    from fx import spawn_sparks, spawn_explosion
+except ModuleNotFoundError:
+    from ..fx import spawn_sparks, spawn_explosion
+
 
 
 class Boss(pg.sprite.Sprite):

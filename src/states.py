@@ -2,16 +2,21 @@
 import pygame as pg
 import random
 import math
-from sprites import Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid
+from sprites import (
+    Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid,
+    GoliathDreadnought, ApexVoidLeviathan, OrbitalShieldBit, EscortDrone, ProximityMine
+)
 from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
 from level_system import LevelSystem, get_theater
 from world.environment import SpaceEnvironment
 from render.camera import Camera
 from render.pipeline import RenderPipeline
+from vfx.telegraph import TelegraphManager
 from ui.hud import HUD
 from ui.tooltip import UITooltipManager
 from ui.login_state import LoginState
+
 
 
 def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
@@ -1627,6 +1632,9 @@ class PlayState(State):
         self.boss_instance      = None
         self.boss_warning_shown = False  # Sprint 7: ensures warning cinematic plays only once
 
+        # Sprint 14 Phase 1: Visual Telegraphing & Area Hazard System
+        self.telegraphs = TelegraphManager(self.game)
+
         # Sprint 6 game-feel feedback
         self.damage_flash = 0.0
         self.boss_warning_timer = 0.0
@@ -1707,6 +1715,23 @@ class PlayState(State):
         if hasattr(self, 'pipeline'):
             self.pipeline.update(dt)
 
+        # Sprint 14 Phase 1: Update visual telegraphs & apply incoming hazard damage
+        if hasattr(self, 'telegraphs') and self.telegraphs:
+            self.telegraphs.update(dt)
+            telegraph_dmg = self.telegraphs.check_player_hits(self.player.rect)
+            if telegraph_dmg > 0:
+                if self.player.get_hit(telegraph_dmg):
+                    self._reset_combo()
+                    self.trigger_damage_flash(0.5)
+                    self.trigger_shake(0.35, 9)
+                    self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, f"-{telegraph_dmg} HP", color=(255, 100, 100))
+                    if self.player.lives <= 0:
+                        if hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.trigger_ducking(0.6, 0.3)
+                            self.game.audio.play_sfx("player_death", pos_x=self.player.pos_x)
+                        self.game.change_state(GameOverState(self.game, self.score))
+                        return
+
         self.damage_flash = max(0.0, self.damage_flash - dt)
         if self.level_sys.is_boss_wave:
             self.boss_warning_timer = 1.5
@@ -1758,16 +1783,37 @@ class PlayState(State):
                 # Spawn the Boss with level-scaled multipliers, skinned to the mission's faction theater
                 cfg = self.level_sys.current_wave_cfg
                 theater = self.environment.theater
-                self.boss_instance = Boss(
-                    self.game,
-                    hp_mult=cfg["hp_mult"],
-                    spd_mult=cfg["spd_mult"],
-                    boss_key=theater["boss_key"],
-                    laser_key=theater["laser_key"],
-                )
+                lvl = self.level_sys.level_number
+
+                # Sprint 14 Phase 1: Specialized Boss Encounters
+                if lvl == 5:
+                    self.boss_instance = GoliathDreadnought(
+                        self.game,
+                        hp_mult=cfg["hp_mult"],
+                        spd_mult=cfg["spd_mult"],
+                        boss_key=theater["boss_key"],
+                        laser_key=theater["laser_key"],
+                    )
+                elif lvl == 10:
+                    self.boss_instance = ApexVoidLeviathan(
+                        self.game,
+                        hp_mult=cfg["hp_mult"],
+                        spd_mult=cfg["spd_mult"],
+                        boss_key=theater["boss_key"],
+                        laser_key=theater["laser_key"],
+                    )
+                else:
+                    self.boss_instance = Boss(
+                        self.game,
+                        hp_mult=cfg["hp_mult"],
+                        spd_mult=cfg["spd_mult"],
+                        boss_key=theater["boss_key"],
+                        laser_key=theater["laser_key"],
+                    )
                 self.enemies.add(self.boss_instance)
                 self.all_sprites.add(self.boss_instance)
                 self.boss_active = True
+
 
             elif spawn_type is not None:
                 # Regular enemy spawn with level multipliers, skinned to the mission's faction theater
@@ -2113,6 +2159,14 @@ class PlayState(State):
         self.player.draw_presentation_front(self.canvas)
         self.particles.draw(self.canvas)
         self._draw_float_text(self.canvas)
+
+        # Sprint 14 Phase 1: Boss extra presentation (invulnerability bubble, shield barriers)
+        if self.boss_active and self.boss_instance and hasattr(self.boss_instance, "draw_extras"):
+            self.boss_instance.draw_extras(self.canvas)
+
+        # Sprint 14 Phase 1: Visual Telegraphs, Area Hazards & Phase Shift EMPs
+        if hasattr(self, 'telegraphs') and self.telegraphs:
+            self.telegraphs.draw(self.canvas, self.game.assets)
 
         # Damage flash overlay for hits
         if self.damage_flash > 0:

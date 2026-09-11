@@ -2,8 +2,13 @@
 import math
 import random
 import pygame as pg
-from boss.boss_base import Boss
-from boss.minions import EscortDrone
+try:
+    from boss.boss_base import Boss
+    from boss.minions import EscortDrone
+except ModuleNotFoundError:
+    from .boss_base import Boss
+    from .minions import EscortDrone
+
 
 
 class ApexVoidLeviathan(Boss):

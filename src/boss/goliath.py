@@ -2,8 +2,13 @@
 import math
 import random
 import pygame as pg
-from boss.boss_base import Boss
-from boss.minions import OrbitalShieldBit, ProximityMine
+try:
+    from boss.boss_base import Boss
+    from boss.minions import OrbitalShieldBit, ProximityMine
+except ModuleNotFoundError:
+    from .boss_base import Boss
+    from .minions import OrbitalShieldBit, ProximityMine
+
 
 
 class GoliathDreadnought(Boss):
