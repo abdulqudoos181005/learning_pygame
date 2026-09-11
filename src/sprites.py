@@ -487,119 +487,16 @@ class Enemy(pg.sprite.Sprite):
             state.all_sprites.add(l1, l2)
 
 
-class Boss(pg.sprite.Sprite):
-    def __init__(self, game, hp_mult=1.0, spd_mult=1.0, boss_key=None, laser_key=None):
-        super().__init__()
-        self.game = game
-        self.image = self.game.assets.get_image(boss_key or "boss", 150, 100)
-        self.laser_key = laser_key or "laser_enemy"
-        self.rect = self.image.get_rect(center=(self.game.width // 2, -100))
-        
-        # Stats (scaled by level multipliers)
-        base_health = 500
-        self.max_health = int(base_health * hp_mult)
-        self.health = self.max_health
-        self.speed_x = 100 * spd_mult
-        self.target_y = 120
-        self.score_value = int(5000 * hp_mult)
-        
-        # Sprint 11 / Pillar F: Named boss identity
-        self.boss_title = "CRIMSON MOTHERSHIP" if not boss_key or "crimson" in str(boss_key) else "SOLAR CITADEL DREADNOUGHT"
-        
-        # Attack intervals
-        self.shoot_timer = 2.0
-        self.attack_phase = 1
+# Boss Archetypes & Minions imported from modular boss package
+from boss import (
+    Boss,
+    GoliathDreadnought,
+    ApexVoidLeviathan,
+    OrbitalShieldBit,
+    EscortDrone,
+    ProximityMine,
+)
 
-    @property
-    def boss_name(self):
-        return f"{self.boss_title} — PHASE {self.attack_phase}"
-
-    def get_hit(self, damage):
-        old_phase = self.attack_phase
-        self.health -= damage
-        # Phase transitions (proportional to max health)
-        if self.health <= self.max_health * 0.3:
-            self.attack_phase = 3
-        elif self.health <= self.max_health * 0.7:
-            self.attack_phase = 2
-            
-        if self.attack_phase != old_phase and hasattr(self.game, 'state'):
-            state = self.game.state
-            if hasattr(state, 'camera'):
-                state.camera.trigger_hit_stop(0.05)
-                state.camera.add_shake(0.35, 7.0)
-            elif hasattr(state, 'trigger_shake'):
-                state.trigger_shake(0.35, 7)
-            
-        if self.health <= 0:
-            self.kill()
-            return True
-        return False
-
-    def update(self, dt):
-        # Entry animation: move down into the screen
-        if self.rect.centery < self.target_y:
-            self.rect.y += 80 * dt
-        else:
-            # Side-to-side sweeping motion
-            self.rect.x += self.speed_x * dt
-            if self.rect.left < 50:
-                self.rect.left = 50
-                self.speed_x = abs(self.speed_x)
-            elif self.rect.right > self.game.width - 50:
-                self.rect.right = self.game.width - 50
-                self.speed_x = -abs(self.speed_x)
-
-        # Shooting logic
-        if self.shoot_timer > 0:
-            self.shoot_timer -= dt
-        else:
-            self.shoot()
-            # Firing rates vary by phase
-            if self.attack_phase == 1:
-                self.shoot_timer = 1.5
-            elif self.attack_phase == 2:
-                self.shoot_timer = 0.8
-            else:
-                self.shoot_timer = 0.4
-
-    def shoot(self):
-        state = self.game.state
-        if not hasattr(state, 'enemy_lasers'):
-            return
-
-        if hasattr(self.game, 'audio') and self.game.audio:
-            self.game.audio.play_sfx("laser_pew", pos_x=self.rect.centerx, volume_mult=0.8)
-        elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
-            self.game.assets.get_sound("laser_pew").play()
-
-        if self.attack_phase == 1:
-            # Fire lasers from left and right gun pods, colored to the mission's faction theater
-            l1 = Laser(self.game, self.rect.centerx - 40, self.rect.bottom, speed_y=380, img_name=self.laser_key)
-            l2 = Laser(self.game, self.rect.centerx + 40, self.rect.bottom, speed_y=380, img_name=self.laser_key)
-            state.enemy_lasers.add(l1, l2)
-            state.all_sprites.add(l1, l2)
-            
-        elif self.attack_phase == 2:
-            # Fire heavy green plasma beams down-left, down, down-right
-            l1 = Laser(self.game, self.rect.centerx,      self.rect.bottom, speed_y=420, angle=0)
-            l2 = Laser(self.game, self.rect.centerx - 30, self.rect.bottom, speed_y=400, angle=-15)
-            l3 = Laser(self.game, self.rect.centerx + 30, self.rect.bottom, speed_y=400, angle=15)
-            
-            # Re-key them as boss lasers (heavy plasma green texture)
-            for l in (l1, l2, l3):
-                l.raw_image = self.game.assets.get_image("laser_boss", 16, 40)
-                l.image = pg.transform.rotate(l.raw_image, -l.angle) if l.angle != 0 else l.raw_image
-                
-            state.enemy_lasers.add(l1, l2, l3)
-            state.all_sprites.add(l1, l2, l3)
-            
-        elif self.attack_phase == 3:
-            # Rapid fire sweeping single lasers, colored to the mission's faction theater
-            angle = random.uniform(-40, 40)
-            l = Laser(self.game, self.rect.centerx, self.rect.bottom, speed_y=480, angle=angle, img_name=self.laser_key)
-            state.enemy_lasers.add(l)
-            state.all_sprites.add(l)
 
 
 class Asteroid(pg.sprite.Sprite):

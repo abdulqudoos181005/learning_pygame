@@ -160,28 +160,85 @@ class HUD:
             pg.draw.rect(surface, (40, 40, 40), (140, height - 100 + idx * 30, 100, 6))
             pg.draw.rect(surface, color,        (140, height - 100 + idx * 30, bar_len, 6))
 
-        # 7. NAMED BOSS HEALTH BAR (When Boss is Active)
+        # 7. SEGMENTED MULTI-PHASE BOSS HUD (When Boss is Active)
         if play_state.boss_active and play_state.boss_instance:
             boss = play_state.boss_instance
-            boss_bar_w = 440
-            boss_bar_h = 16
+            boss_bar_w = 500
+            boss_bar_h = 18
             boss_bar_x = width // 2 - boss_bar_w // 2
-            boss_bar_y = 58
+            boss_bar_y = 56
 
-            boss_name = getattr(boss, 'boss_name', 'CRIMSON MOTHERSHIP — PHASE 1')
-            name_surf = assets.font.render(boss_name, True, (255, 90, 110))
-            surface.blit(name_surf, name_surf.get_rect(center=(width // 2, boss_bar_y - 12)))
+            # A. Boss Nameplate & Phase Badge
+            boss_title = getattr(boss, 'boss_title', 'BOSS ENCOUNTER')
+            phase_subtitle = getattr(boss, 'phase_subtitle', f'PHASE {getattr(boss, "attack_phase", 1)}')
+            
+            # Badge frame
+            badge_text = f"★ {boss_title}  —  {phase_subtitle} ★"
+            name_surf = assets.font.render(badge_text, True, (255, 130, 140))
+            name_rect = name_surf.get_rect(center=(width // 2, boss_bar_y - 14))
+            
+            # Badge background
+            bg_pad = 12
+            badge_bg = pg.Rect(name_rect.left - bg_pad, name_rect.top - 2, name_rect.width + bg_pad * 2, name_rect.height + 4)
+            pg.draw.rect(surface, (20, 10, 22, 220), badge_bg, border_radius=4)
+            pg.draw.rect(surface, (160, 40, 60, 255), badge_bg, 1, border_radius=4)
+            surface.blit(name_surf, name_rect)
 
-            # Background & Frame
-            pg.draw.rect(surface, (40, 10, 15), (boss_bar_x - 2, boss_bar_y - 2, boss_bar_w + 4, boss_bar_h + 4), border_radius=6)
-            pg.draw.rect(surface, (180, 40, 60), (boss_bar_x - 2, boss_bar_y - 2, boss_bar_w + 4, boss_bar_h + 4), 2, border_radius=6)
+            # B. Background & Frame
+            pg.draw.rect(surface, (25, 12, 18), (boss_bar_x - 3, boss_bar_y - 3, boss_bar_w + 6, boss_bar_h + 6), border_radius=6)
+            pg.draw.rect(surface, (140, 35, 50), (boss_bar_x - 3, boss_bar_y - 3, boss_bar_w + 6, boss_bar_h + 6), 2, border_radius=6)
 
+            # Ratios
             b_ratio = max(0.0, min(1.0, boss.health / max(1, boss.max_health)))
+            
+            # Update trailing damage bar
+            if not hasattr(self, 'boss_trail_ratio') or self.boss_trail_ratio < b_ratio:
+                self.boss_trail_ratio = b_ratio
+            else:
+                self.boss_trail_ratio = max(b_ratio, self.boss_trail_ratio - 0.25 * getattr(play_state, 'last_dt', 0.016))
+
+            # Trailing damage bar (amber/orange)
+            trail_fill = int(self.boss_trail_ratio * boss_bar_w)
+            if trail_fill > 0:
+                pg.draw.rect(surface, (255, 160, 40), (boss_bar_x, boss_bar_y, trail_fill, boss_bar_h), border_radius=4)
+
+            # Active health bar fill (crimson/ruby)
             b_fill = int(b_ratio * boss_bar_w)
             if b_fill > 0:
-                # Crimson / Yellow gradient fill
-                fill_color = (255, 50, 70) if b_ratio > 0.3 else (255, 200, 50)
+                fill_color = (255, 45, 65) if b_ratio > 0.33 else (255, 80, 40)
                 pg.draw.rect(surface, fill_color, (boss_bar_x, boss_bar_y, b_fill, boss_bar_h), border_radius=4)
+
+            # C. Shield Overlay Bar (if boss has active shield)
+            boss_shield = getattr(boss, 'shield', 0)
+            boss_max_shield = getattr(boss, 'max_shield', 0)
+            if boss_shield > 0 and boss_max_shield > 0:
+                sh_ratio = max(0.0, min(1.0, boss_shield / boss_max_shield))
+                sh_fill = int(sh_ratio * boss_bar_w)
+                sh_surf = pg.Surface((sh_fill, 4), pg.SRCALPHA)
+                sh_surf.fill((0, 240, 255, 230))
+                surface.blit(sh_surf, (boss_bar_x, boss_bar_y - 6))
+                pg.draw.rect(surface, (0, 160, 220), (boss_bar_x - 1, boss_bar_y - 7, boss_bar_w + 2, 6), 1)
+
+            # D. Phase Segment Pips / Dividers
+            thresholds = getattr(boss, 'phase_thresholds', [0.66, 0.33])
+            for thresh in thresholds:
+                pip_x = int(boss_bar_x + thresh * boss_bar_w)
+                # Diamond / metallic divider pip
+                pg.draw.line(surface, (20, 8, 12), (pip_x, boss_bar_y - 4), (pip_x, boss_bar_y + boss_bar_h + 3), 3)
+                pg.draw.line(surface, (255, 220, 160), (pip_x, boss_bar_y - 3), (pip_x, boss_bar_y + boss_bar_h + 2), 1)
+                # Top gemstone triangle
+                pg.draw.polygon(surface, (255, 200, 80), [(pip_x - 3, boss_bar_y - 5), (pip_x + 3, boss_bar_y - 5), (pip_x, boss_bar_y - 1)])
+
+            # E. Supernova Countdown Alert (Level 10 Phase 3 DPS check)
+            if getattr(boss, 'supernova_active', False):
+                sn_timer = getattr(boss, 'supernova_timer', 10.0)
+                sn_pulse = (math.sin(pg.time.get_ticks() * 0.02) + 1.0) / 2.0
+                sn_color = (255, 50, 60) if sn_pulse > 0.4 else (255, 220, 50)
+                sn_text = f"⚠️ CORE MELTDOWN: SUPERNOVA IN {sn_timer:.1f}s ⚠️"
+                sn_surf = assets.hud_font.render(sn_text, True, sn_color)
+                sn_rect = sn_surf.get_rect(center=(width // 2, boss_bar_y + boss_bar_h + 14))
+                surface.blit(sn_surf, sn_rect)
+
 
         # 8. HITMARKER FEEDBACK (80ms Chevron at cursor / impact position)
         if self.hitmarker_timer > 0:
