@@ -2193,14 +2193,13 @@ class PlayState(State):
             health_ratio = self.player.health / max(1, self.player.max_health)
             shield_active = self.player.shield > 0
             speed_boost = self.player.speed_boost_timer > 0
-            is_boss_alert = self.boss_warning_timer > 0
             self.pipeline.present(
                 screen,
                 camera=getattr(self, 'camera', None),
                 health_ratio=health_ratio,
                 shield_active=shield_active,
                 speed_boost=speed_boost,
-                is_boss_alert=is_boss_alert,
+                is_boss_alert=False,
             )
         else:
             # Final blit onto physical display screen, applying coordinates offset by screen shake values
