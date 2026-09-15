@@ -173,11 +173,9 @@ class RenderPipeline:
         else:
             transformed = self.world_canvas
 
-        # 2. Chromatic aberration during heavy shake or boss alert only
+        # 2. Chromatic aberration during heavy shake only (boss alert additive brightness effect removed)
         chroma_intensity = 0
-        if is_boss_alert:
-            chroma_intensity = 2
-        elif shake_mag > 8.0:
+        if shake_mag > 8.0:
             chroma_intensity = 1
 
         if chroma_intensity > 0:
