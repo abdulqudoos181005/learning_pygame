@@ -81,6 +81,10 @@ class LaserSightline:
     def is_finished(self):
         return self.state == self.STATE_FINISHED
 
+    @property
+    def finished(self):
+        return self.state == self.STATE_FINISHED
+
     def update(self, dt):
         if self.state == self.STATE_FINISHED:
             return
@@ -247,6 +251,10 @@ class RingHazard:
 
     @property
     def is_finished(self):
+        return self.state == self.STATE_FINISHED
+
+    @property
+    def finished(self):
         return self.state == self.STATE_FINISHED
 
     def update(self, dt):
