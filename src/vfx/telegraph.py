@@ -352,6 +352,7 @@ class ConicalHazard:
         burst_duration=0.5,
         damage=30,
         color=(255, 80, 50),
+        on_burst_callback=None,
     ):
         self.origin = pg.Vector2(origin)
         self.center_angle = center_angle  # In degrees, 90 = straight down
@@ -361,10 +362,28 @@ class ConicalHazard:
         self.burst_duration = burst_duration
         self.damage = damage
         self.color = color
+        self.on_burst_callback = on_burst_callback
+        self.has_burst_cb = False
 
         self.state = self.STATE_WARNING
         self.timer = 0.0
         self.damage_dealt = False
+
+    @property
+    def is_warning(self):
+        return self.state == self.STATE_WARNING
+
+    @property
+    def is_bursting(self):
+        return self.state == self.STATE_BURST
+
+    @property
+    def is_finished(self):
+        return self.state == self.STATE_FINISHED
+
+    @property
+    def finished(self):
+        return self.state == self.STATE_FINISHED
 
     def update(self, dt):
         if self.state == self.STATE_FINISHED:
@@ -375,6 +394,9 @@ class ConicalHazard:
             if self.timer >= self.warning_duration:
                 self.state = self.STATE_BURST
                 self.timer = 0.0
+                if self.on_burst_callback and not self.has_burst_cb:
+                    self.has_burst_cb = True
+                    self.on_burst_callback(self)
         elif self.state == self.STATE_BURST:
             if self.timer >= self.burst_duration:
                 self.state = self.STATE_FINISHED
@@ -386,8 +408,13 @@ class ConicalHazard:
         rect_center = pg.Vector2(target_rect.center)
         offset = rect_center - self.origin
         dist = offset.length()
-        if dist > self.radius + 15:
+        target_rad = max(target_rect.width, target_rect.height) / 2.0
+        if dist > self.radius + target_rad + 8.0:
             return False
+
+        if dist < 1.0:
+            self.damage_dealt = True
+            return True
 
         angle_deg = math.degrees(math.atan2(offset.y, offset.x))
         diff = (angle_deg - self.center_angle + 180) % 360 - 180
@@ -413,20 +440,21 @@ class ConicalHazard:
             rad = math.radians(deg)
             px = ox + self.radius * math.cos(rad)
             py = oy + self.radius * math.sin(rad)
-            points.append((px, py))
+            points.append((round(px), round(py)))
 
         surf = pg.Surface(surface.get_size(), pg.SRCALPHA)
         if self.state == self.STATE_WARNING:
             pulse = (math.sin(self.timer * 16.0) + 1.0) / 2.0
-            fill_alpha = int(40 + pulse * 35)
-            line_alpha = int(140 + pulse * 90)
+            fill_alpha = max(0, min(255, int(40 + pulse * 35)))
+            line_alpha = max(0, min(255, int(140 + pulse * 90)))
             pg.draw.polygon(surf, (*self.color[:3], fill_alpha), points)
             pg.draw.polygon(surf, (*self.color[:3], line_alpha), points, 2)
         elif self.state == self.STATE_BURST:
-            progress = min(1.0, self.timer / self.burst_duration)
-            alpha = int(220 * (1.0 - progress))
-            pg.draw.polygon(surf, (255, 120, 40, alpha), points)
-            pg.draw.polygon(surf, (255, 240, 200, alpha), points, 3)
+            progress = max(0.0, min(1.0, self.timer / max(0.001, self.burst_duration)))
+            alpha = max(0, min(255, int(220 * (1.0 - progress))))
+            if alpha > 0:
+                pg.draw.polygon(surf, (255, 120, 40, alpha), points)
+                pg.draw.polygon(surf, (255, 240, 200, alpha), points, 3)
 
         surface.blit(surf, (0, 0), special_flags=pg.BLEND_ADD)
 
@@ -445,6 +473,10 @@ class PhaseEMPBlast:
         self.timer = 0.0
         self.finished = False
 
+    @property
+    def is_finished(self):
+        return self.finished
+
     def update(self, dt):
         if self.finished:
             return
@@ -456,9 +488,9 @@ class PhaseEMPBlast:
         if self.finished:
             return
 
-        progress = min(1.0, self.timer / self.duration)
+        progress = max(0.0, min(1.0, self.timer / max(0.001, self.duration)))
         cur_radius = int(self.max_radius * (progress ** 0.8))
-        alpha = int(240 * (1.0 - progress))
+        alpha = max(0, min(255, int(240 * (1.0 - progress))))
 
         if cur_radius <= 2:
             return
@@ -472,7 +504,7 @@ class PhaseEMPBlast:
         
         # Secondary inner pulse
         if cur_radius > 15:
-            pg.draw.circle(surf, (255, 255, 255, alpha // 2), (cx, cy), max(2, cur_radius - 8), max(1, ring_w // 2))
+            pg.draw.circle(surf, (255, 255, 255, max(0, min(255, alpha // 2))), (cx, cy), max(2, cur_radius - 8), max(1, ring_w // 2))
 
         surface.blit(surf, (0, 0), special_flags=pg.BLEND_ADD)
 
@@ -489,6 +521,10 @@ class BossPhaseNotification:
         self.color = color
         self.timer = 0.0
         self.finished = False
+
+    @property
+    def is_finished(self):
+        return self.finished
 
     def update(self, dt):
         if self.finished:
@@ -612,6 +648,7 @@ class TelegraphManager:
         burst_duration=0.5,
         damage=30,
         color=(255, 80, 50),
+        on_burst_callback=None,
     ):
         hz = ConicalHazard(
             origin=origin,
@@ -622,12 +659,19 @@ class TelegraphManager:
             burst_duration=burst_duration,
             damage=damage,
             color=color,
+            on_burst_callback=on_burst_callback,
         )
         self.hazards.append(hz)
         return hz
 
     def create_emp_blast(self, center, max_radius=850, duration=0.8, color=(0, 220, 255)):
-        emp = PhaseEMPBlast(center=center, max_radius=max_radius, duration=duration, color=color)
+        # Support either center=(x, y) / Vector2 or positional (x, y) if mistakenly called as (x, y)
+        if isinstance(center, (int, float)) and isinstance(max_radius, (int, float)):
+            center_pos = (center, max_radius)
+            max_radius = 850
+        else:
+            center_pos = center
+        emp = PhaseEMPBlast(center=center_pos, max_radius=max_radius, duration=duration, color=color)
         self.emp_blasts.append(emp)
         return emp
 

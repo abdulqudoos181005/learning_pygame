@@ -243,7 +243,7 @@ class HUD:
         # 8. HITMARKER FEEDBACK (80ms Chevron at cursor / impact position)
         if self.hitmarker_timer > 0:
             hx, hy = self.hitmarker_pos
-            alpha = min(255, int((self.hitmarker_timer / 0.08) * 255))
+            alpha = max(0, min(255, int((self.hitmarker_timer / 0.08) * 255)))
             hm_surf = pg.Surface((32, 32), pg.SRCALPHA)
             color = (255, 255, 255, alpha)
             size = 8
@@ -258,7 +258,7 @@ class HUD:
         for enemy in getattr(play_state, 'enemies', ()):
             if getattr(enemy, 'telegraph_timer', 0) > 0:
                 # 400ms warning chevron under firing cruisers
-                pulse = int(180 + 75 * math.sin(pg.time.get_ticks() * 0.04))
+                pulse = max(0, min(255, int(180 + 75 * math.sin(pg.time.get_ticks() * 0.04))))
                 chev_surf = pg.Surface((40, 20), pg.SRCALPHA)
                 pts = [(6, 4), (20, 16), (34, 4)]
                 pg.draw.lines(chev_surf, (255, 40, 40, pulse), False, pts, 3)

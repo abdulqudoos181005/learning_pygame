@@ -90,7 +90,7 @@ class Boss(pg.sprite.Sprite):
 
             # 2. Spawn visual EMP shockwave ring
             if hasattr(state, "telegraphs") and state.telegraphs:
-                state.telegraphs.create_emp_blast(self.rect.centerx, self.rect.centery)
+                state.telegraphs.create_emp_blast(self.rect.center)
                 state.telegraphs.notify_boss_phase(title, subtitle)
 
             # 3. Camera effects (hit stop + screen shake)
@@ -155,6 +155,7 @@ class Boss(pg.sprite.Sprite):
         self.minions.clear()
 
     def update(self, dt):
+        self.minions = [m for m in self.minions if m.alive()]
         if self.invulnerable_timer > 0:
             self.invulnerable_timer = max(0.0, self.invulnerable_timer - dt)
 

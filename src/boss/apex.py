@@ -169,7 +169,11 @@ class ApexVoidLeviathan(Boss):
         # Inflict heavy damage on player
         player = getattr(state, "player", None)
         if player:
-            player.get_hit(80)
+            died = player.get_hit(80)
+            if hasattr(state, "trigger_damage_flash"):
+                state.trigger_damage_flash(0.6 if died else 0.35)
+            if hasattr(state, "spawn_floating_text"):
+                state.spawn_floating_text(player.rect.centerx, player.rect.top, "-80 HP", color=(255, 80, 80))
 
     def shoot(self):
         state = getattr(self.game, "state", None)

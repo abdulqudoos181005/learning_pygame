@@ -177,7 +177,8 @@ class TestSprint14Phase1Telegraphs(unittest.TestCase):
         self.assertTrue(hz.is_finished)
 
     def test_conical_hazard_arc_detection(self):
-        """Tests ConicalHazard angular hit detection."""
+        """Tests ConicalHazard full lifecycle, angular hit detection, and drawing."""
+        burst_called = []
         cone = ConicalHazard(
             origin=(640, 100),
             center_angle=90.0,  # Straight downward
@@ -186,9 +187,26 @@ class TestSprint14Phase1Telegraphs(unittest.TestCase):
             warning_duration=0.2,
             burst_duration=0.3,
             damage=25,
+            on_burst_callback=lambda c: burst_called.append(c),
         )
-        cone.update(0.25)  # Enters burst
+        self.assertTrue(cone.is_warning)
+        self.assertFalse(cone.is_bursting)
+        self.assertFalse(cone.is_finished)
+        self.assertFalse(cone.finished)
+
+        # Draw in warning state
+        test_surf = pg.Surface((1280, 720), pg.SRCALPHA)
+        cone.draw(test_surf)
+
+        # Advance to burst
+        cone.update(0.25)
+        self.assertFalse(cone.is_warning)
+        self.assertTrue(cone.is_bursting)
         self.assertEqual(cone.state, ConicalHazard.STATE_BURST)
+        self.assertEqual(len(burst_called), 1)
+
+        # Draw in burst state
+        cone.draw(test_surf)
 
         # Directly below origin: in cone
         direct_below = pg.Rect(630, 250, 40, 40)
@@ -197,6 +215,15 @@ class TestSprint14Phase1Telegraphs(unittest.TestCase):
         # Far to the side: outside cone
         far_side = pg.Rect(200, 100, 40, 40)
         self.assertFalse(cone.check_hit(far_side))
+
+        # Advance to finished
+        cone.update(0.35)
+        self.assertFalse(cone.is_bursting)
+        self.assertTrue(cone.is_finished)
+        self.assertTrue(cone.finished)
+
+        # Draw after finished (should be no-op)
+        cone.draw(test_surf)
 
     def test_telegraph_manager_integration(self):
         """Tests TelegraphManager creation, updates, and player damage check."""
@@ -215,6 +242,15 @@ class TestSprint14Phase1Telegraphs(unittest.TestCase):
             warning_duration=0.2,
             burst_duration=0.2,
             damage=20,
+        )
+        ch = tm.create_conical_hazard(
+            origin=(640, 100),
+            center_angle=90.0,
+            spread_angle=50.0,
+            radius=400,
+            warning_duration=0.2,
+            burst_duration=0.2,
+            damage=30,
         )
         emp = tm.create_emp_blast(center=(640, 200))
         notif = tm.notify_boss_phase("BOSS ALERT", "PHASE 2")
@@ -317,6 +353,18 @@ class TestSprint14Phase1Bosses(unittest.TestCase):
         mine.detonate()
         self.assertFalse(mine.alive())
         self.assertGreater(len(self.state.telegraphs.hazards), 0)
+
+        # Sweeping conical hazard triggering in Phase 3
+        hazards_before = len(self.state.telegraphs.hazards)
+        goliath._trigger_sweeping_arc()
+        self.assertGreater(len(self.state.telegraphs.hazards), hazards_before)
+
+        # Update telegraphs through lifecycle and verify draw doesn't crash
+        test_surf = pg.Surface((1280, 720), pg.SRCALPHA)
+        self.state.telegraphs.update(0.5)
+        self.state.telegraphs.draw(test_surf)
+        self.state.telegraphs.update(0.5)
+        self.state.telegraphs.draw(test_surf)
 
 
     def test_apex_void_leviathan_danmaku_and_supernova(self):

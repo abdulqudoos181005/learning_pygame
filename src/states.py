@@ -1731,6 +1731,11 @@ class PlayState(State):
                             self.game.audio.play_sfx("player_death", pos_x=self.player.pos_x)
                         self.game.change_state(GameOverState(self.game, self.score))
                         return
+                else:
+                    self._reset_combo()
+                    self.trigger_damage_flash(0.25)
+                    self.trigger_shake(0.2, 5)
+                    self.spawn_floating_text(self.player.rect.centerx, self.player.rect.top, f"-{telegraph_dmg} HP", color=(255, 120, 120))
 
         self.damage_flash = max(0.0, self.damage_flash - dt)
         if self.level_sys.is_boss_wave:
@@ -2528,7 +2533,7 @@ class BossWarningState(State):
         # Darkening red tint layer, intensity pulses with the flash timer
         flash_intensity = abs(math.sin(self.timer * 5.5))
         overlay = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
-        overlay.fill((180, 0, 0, int(90 + 80 * flash_intensity)))
+        overlay.fill((180, 0, 0, max(0, min(255, int(90 + 80 * flash_intensity)))))
         screen.blit(overlay, (0, 0))
 
         # Animated scan-line stripes for drama
@@ -2623,7 +2628,7 @@ class BossDefeatedState(State):
         self.particles.draw(screen)
 
         # White flash that fades with time
-        flash_alpha = max(0, int(180 * (1.0 - self.timer / 0.5)))
+        flash_alpha = max(0, min(255, int(180 * (1.0 - self.timer / 0.5))))
         if flash_alpha > 0:
             flash = pg.Surface((self.game.width, self.game.height), pg.SRCALPHA)
             flash.fill((255, 255, 255, flash_alpha))
