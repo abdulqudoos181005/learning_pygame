@@ -1364,25 +1364,38 @@ graph TD
 ---
 
 
-### Phase 2: Elite Enemy Archetypes & Wave Formations
+### Phase 2: Elite Enemy Archetypes & Wave Formations — ✅ COMPLETE
 
-#### 1. Four New Tactical Enemy Classes (`src/sprites.py`)
+#### 1. Four New Tactical Enemy Classes (`src/enemies/` & `src/sprites.py`) — ✅ DONE
 - **`Aegis Defender` (Frontline Barrier Ship):**
-  - High durability ship that deploys a 120-degree frontal energy shield.
-  - Blocks frontal player lasers, forcing player to flank, use missiles, or wait for overheat cycles.
+  - High durability barrier ship (`max_health = 85 * hp_mult`, `score_value = 600`).
+  - Deploys a 120-degree frontal energy shield that deflects incoming player lasers.
+  - Periodic overheat cycle (5.0s active, 2.5s overheat cooldown) forcing players to flank, deploy homing missiles, or time vulnerability windows.
+  - Directional energy barrier arc rendering in `draw_extras()` with ripple flash and overheat venting feedback.
 - **`Sniper Skiff` (Long-Range Railgun):**
-  - Stays at the top perimeter, aims a visible targeting laser at the player for 1.2s, then fires an ultra-fast high-damage railgun slug.
+  - Top perimeter sniper craft (`max_health = 35 * hp_mult`, `score_value = 450`).
+  - Patrols top screen perimeter, locks onto player coordinates using `LaserSightline` telegraph (1.2s tracking, 0.25s lock).
+  - Discharges an ultra-fast high-damage `RailgunSlug` (950 px/s, 30 damage) with heavy impact and audio cues.
 - **`Phase Phantom` (Stealth Interceptor):**
-  - Features optical cloaking (fades to 15% opacity and cannot be auto-targeted by drones).
-  - Uncloaks suddenly behind or beside the player to deliver rapid shotgun bursts before phasing away.
-- **`Hive Carrier` (Swarm Mothership):**
-  - Heavy armored cruiser that periodically launches 3-4 agile micro-drones (`Swarmer`) that home in on the player.
+  - Optical cloaking stealth craft (`max_health = 45 * hp_mult`, `score_value = 500`).
+  - Fades to 15% opacity (`alpha = 38`); untargetable by player homing missiles while cloaked.
+  - Glides into ambush flank positions beside/behind player, decloaks with phase spark burst, delivers rapid 5-bolt shotgun volley, and recloaks after vulnerability window.
+- **`Hive Carrier` & `Swarmer` (Swarm Mothership & Micro-Drones):**
+  - Colossal armored carrier (`max_health = 180 * hp_mult`, `score_value = 800`).
+  - Twin launch bays periodically deploy 3-4 agile `Swarmer` micro-drones (`max_health = 10`, `score_value = 80`) with homing steering and detonation on impact.
 
-#### 2. Level Integration & Tactical Formations (`src/level_system.py`)
-- Update `LEVEL_CONFIGS` for Levels 3–10:
-  - Shield walls: Aegis Defenders leading waves of Scouts and Snipers.
-  - Ambush waves: Phase Phantoms decloaking mid-wave.
-  - Carrier assaults: Hive Carriers backing up Stinger squadrons.
+#### 2. Level Integration & Tactical Formations (`src/level_system.py`) — ✅ DONE
+- **Updated `LEVEL_CONFIGS` for Levels 3–10:**
+  - **Level 3:** Introduces Sniper Skiffs & Shield walls (`aegis_defender`, `scout`, `sniper_skiff`).
+  - **Level 4:** Ambush waves (`phase_phantom`, `cruiser`, `stinger`).
+  - **Level 5:** Vanguard escort fleet before Goliath Dreadnought.
+  - **Level 6:** Cryo Blockade with Ambush waves & Carrier assaults (`hive_carrier`, `aegis_defender`, `stinger`).
+  - **Level 7–9:** High-intensity tactical combinations (double carrier assaults, fortress waves).
+  - **Level 10:** Grand Armada Vanguard with all 4 elite archetypes leading into the Apex Void Leviathan.
+- **Tactical Formation Sequencing in `LevelSystem._load_wave()`:**
+  - `shield_wall`: Frontline Aegis Defenders lead the queue, standard escorts in middle, Snipers at rear.
+  - `carrier_assault`: Hive Carriers spawned early to establish escort swarms.
+  - `ambush_wave`: Phase Phantoms seeded deeper into waves for ambush surprise.
 
 ---
 

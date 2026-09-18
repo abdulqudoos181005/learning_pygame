@@ -438,6 +438,183 @@ class TestSprint14Phase1HUD(unittest.TestCase):
         self.hud.draw(surf, self.state)
 
 
+class TestSprint14Phase2EliteEnemies(unittest.TestCase):
+    def setUp(self):
+        self.game = MockGame()
+        self.state = MockPlayState(self.game)
+        self.game.state = self.state
+
+    def test_aegis_defender_frontal_deflection_and_overheat(self):
+        """Tests Aegis Defender frontal shield deflection, ripple timer, and overheat vulnerability."""
+        from src.sprites import AegisDefender, Laser
+        aegis = AegisDefender(self.game, 640, 200, hp_mult=1.0)
+        self.assertEqual(aegis.type, "aegis_defender")
+        self.assertTrue(aegis.shield_active)
+        initial_hp = aegis.health
+
+        # Player laser hitting from front (below moving upwards)
+        laser = Laser(self.game, 640, 220, speed_y=-500)
+        self.assertTrue(aegis.deflect_laser(laser))
+        self.assertGreater(aegis.shield_ripple_timer, 0.0)
+        self.assertEqual(aegis.health, initial_hp)
+
+        # Trigger overheat cycle (shield_timer expired)
+        aegis.shield_timer = 0.0
+        aegis.update(0.05)
+        self.assertFalse(aegis.shield_active)
+
+        # During overheat, laser is NOT deflected and hull takes damage
+        self.assertFalse(aegis.deflect_laser(laser))
+        aegis.get_hit(20)
+        self.assertEqual(aegis.health, initial_hp - 20)
+
+        # Verify draw_extras doesn't crash in active or overheated states
+        test_surf = pg.Surface((1280, 720), pg.SRCALPHA)
+        aegis.draw_extras(test_surf)
+        aegis.shield_active = True
+        aegis.draw_extras(test_surf)
+
+    def test_sniper_skiff_aiming_and_railgun(self):
+        """Tests Sniper Skiff perimeter movement, LaserSightline aiming, and high-speed railgun firing."""
+        from src.sprites import SniperSkiff, RailgunSlug
+        sniper = SniperSkiff(self.game, 640, 20, hp_mult=1.0)
+        self.assertEqual(sniper.type, "sniper_skiff")
+        self.assertEqual(sniper.state, SniperSkiff.STATE_ENTERING)
+
+        # Descends to perimeter and transitions to patrol
+        sniper.update(1.0)
+        self.assertEqual(sniper.state, SniperSkiff.STATE_PATROL)
+        self.assertEqual(sniper.speed_y, 0.0)
+
+        # Advance patrol timer to trigger aiming
+        sniper.patrol_timer = 0.0
+        sniper.update(0.05)
+        self.assertEqual(sniper.state, SniperSkiff.STATE_AIMING)
+        self.assertIsNotNone(sniper.sightline)
+
+        # Fire railgun slug
+        lasers_before = len(self.state.enemy_lasers)
+        sniper._fire_railgun(sniper.sightline)
+        self.assertEqual(len(self.state.enemy_lasers), lasers_before + 1)
+        slug = [s for s in self.state.enemy_lasers if isinstance(s, RailgunSlug)][0]
+        self.assertEqual(slug.damage, 30)
+        self.assertEqual(slug.speed, 950.0)
+
+        # Update slug and verify draw_trail
+        slug.update(0.016)
+        test_surf = pg.Surface((1280, 720), pg.SRCALPHA)
+        slug.draw_trail(test_surf)
+
+        # Destroying sniper cleans up sightline
+        sniper.get_hit(sniper.health + 10)
+        self.assertFalse(sniper.alive())
+        self.assertIsNone(sniper.sightline)
+
+    def test_phase_phantom_cloaking_and_ambush(self):
+        """Tests Phase Phantom optical cloaking, missile untargetability, and decloak shotgun burst."""
+        from src.sprites import PhasePhantom, Missile
+        phantom = PhasePhantom(self.game, 640, 200, hp_mult=1.0)
+        self.assertEqual(phantom.type, "phase_phantom")
+        self.assertTrue(phantom.is_cloaked)
+        self.assertEqual(phantom.image.get_alpha(), 38)
+        self.state.enemies.add(phantom)
+
+        # Missile cannot auto-target cloaked phantom
+        missile = Missile(self.game, 640, 500, self.state.enemies)
+        self.assertIsNone(missile._find_target())
+
+        # Advance stalking timer into decloaking & attack
+        phantom.state_timer = 0.0
+        phantom.update(0.05)
+        self.assertEqual(phantom.state, PhasePhantom.STATE_DECLOAKING)
+
+        phantom.state_timer = 0.0
+        phantom.update(0.05)
+        self.assertEqual(phantom.state, PhasePhantom.STATE_ATTACKING)
+        self.assertFalse(phantom.is_cloaked)
+
+        # When decloaked, missile can target it
+        self.assertEqual(missile._find_target(), phantom)
+
+        # Verify shotgun burst spawned 5 spread projectiles
+        self.assertEqual(len(self.state.enemy_lasers), 5)
+
+        # Verify draw_extras
+        test_surf = pg.Surface((1280, 720), pg.SRCALPHA)
+        phantom.draw_extras(test_surf)
+
+    def test_hive_carrier_and_swarmer_deployment(self):
+        """Tests Hive Carrier positioning, Swarmer micro-drone deployment, and homing steering."""
+        from src.sprites import HiveCarrier, Swarmer
+        carrier = HiveCarrier(self.game, 640, 50, hp_mult=1.0)
+        self.assertEqual(carrier.type, "hive_carrier")
+        self.state.enemies.add(carrier)
+
+        # Move to target hover Y
+        carrier.update(1.5)
+        self.assertGreaterEqual(carrier.rect.centery, carrier.target_y)
+
+        # Trigger drone launch
+        carrier.drone_spawn_timer = 0.0
+        carrier.update(0.05)
+        swarmers = [e for e in self.state.enemies if isinstance(e, Swarmer)]
+        self.assertGreaterEqual(len(swarmers), 3)
+
+        # Test Swarmer homing update towards player
+        swarmer = swarmers[0]
+        swarmer.update(0.1)
+        self.assertTrue(swarmer.alive())
+        self.assertEqual(swarmer.score_value, 80)
+
+        # Carrier destruction
+        carrier.get_hit(carrier.health + 10)
+        self.assertFalse(carrier.alive())
+
+
+class TestSprint14Phase2Formations(unittest.TestCase):
+    def test_tactical_formations_and_level_configs(self):
+        """Tests that LevelSystem configs for levels 3-10 incorporate new elite enemy archetypes and formations."""
+        from src.level_system import LevelSystem, LEVEL_CONFIGS
+
+        # Verify Level 3 introduces sniper skiff and aegis defender
+        l3_types = set()
+        for w in LEVEL_CONFIGS[2]["waves"]:
+            l3_types.update(w["types"])
+        self.assertIn("sniper_skiff", l3_types)
+        self.assertIn("aegis_defender", l3_types)
+
+        # Verify Level 4 introduces phase phantom
+        l4_types = set()
+        for w in LEVEL_CONFIGS[3]["waves"]:
+            l4_types.update(w["types"])
+        self.assertIn("phase_phantom", l4_types)
+
+        # Verify Level 6 introduces hive carrier
+        l6_types = set()
+        for w in LEVEL_CONFIGS[5]["waves"]:
+            l6_types.update(w["types"])
+        self.assertIn("hive_carrier", l6_types)
+
+        # Test Shield Wall formation ordering: Aegis defenders are positioned at front of queue
+        ls = LevelSystem(starting_level=3)
+        ls.wave_index = 1  # Wave 2 is shield_wall formation
+        ls._load_wave()
+        self.assertEqual(ls.current_wave_cfg["formation"], "shield_wall")
+        # In a shield wall, aegis_defender comes before sniper_skiff
+        if "aegis_defender" in ls.spawn_queue and "sniper_skiff" in ls.spawn_queue:
+            first_aegis = ls.spawn_queue.index("aegis_defender")
+            first_sniper = ls.spawn_queue.index("sniper_skiff")
+            self.assertLess(first_aegis, first_sniper)
+
+        # Test Carrier Assault formation ordering: Hive carriers appear early in wave
+        ls.start_level(6)
+        ls.wave_index = 1  # Wave 2 is carrier_assault formation
+        ls._load_wave()
+        self.assertEqual(ls.current_wave_cfg["formation"], "carrier_assault")
+        if "hive_carrier" in ls.spawn_queue:
+            self.assertEqual(ls.spawn_queue[0], "hive_carrier")
+
 
 if __name__ == "__main__":
     unittest.main()
+

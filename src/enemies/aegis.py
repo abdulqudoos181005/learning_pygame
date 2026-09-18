@@ -75,7 +75,7 @@ class AegisDefender(pg.sprite.Sprite):
                     self.game.state.particles,
                     laser.rect.centerx,
                     laser.rect.top,
-                    direction=(0, 1),
+                    (0, 1),
                     color=(0, 230, 255),
                     count=8,
                 )
@@ -112,7 +112,7 @@ class AegisDefender(pg.sprite.Sprite):
                         self.game.state.particles,
                         self.rect.centerx,
                         self.rect.bottom,
-                        direction=(0, 1),
+                        (0, 1),
                         color=(255, 140, 40),
                         count=10,
                     )

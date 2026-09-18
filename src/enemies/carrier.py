@@ -178,7 +178,7 @@ class HiveCarrier(pg.sprite.Sprite):
 
             # Bay launch spark puff
             if hasattr(state, "particles"):
-                spawn_sparks(state.particles, bay_x, bay_y, direction=(0, 1), color=(255, 200, 50), count=6)
+                spawn_sparks(state.particles, bay_x, bay_y, (0, 1), color=(255, 200, 50), count=6)
 
         if hasattr(self.game, "audio") and self.game.audio:
             self.game.audio.play_sfx("laser_pew", pos_x=self.rect.centerx, volume_mult=0.6)

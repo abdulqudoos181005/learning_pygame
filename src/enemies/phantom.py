@@ -121,7 +121,7 @@ class PhasePhantom(pg.sprite.Sprite):
                         self.game.state.particles,
                         self.rect.centerx,
                         self.rect.centery,
-                        direction=(0, 0),
+                        (0, 1),
                         color=(200, 60, 255),
                         count=16,
                     )
