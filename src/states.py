@@ -4,7 +4,8 @@ import random
 import math
 from sprites import (
     Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid,
-    GoliathDreadnought, ApexVoidLeviathan, OrbitalShieldBit, EscortDrone, ProximityMine
+    GoliathDreadnought, ApexVoidLeviathan, OrbitalShieldBit, EscortDrone, ProximityMine,
+    AegisDefender, SniperSkiff, PhasePhantom, HiveCarrier, Swarmer, create_enemy
 )
 from fx import Starfield, spawn_explosion, spawn_sparks
 from save_system import SaveSystem
@@ -1821,10 +1822,10 @@ class PlayState(State):
 
 
             elif spawn_type is not None:
-                # Regular enemy spawn with level multipliers, skinned to the mission's faction theater
+                # Regular or elite enemy spawn with level multipliers, skinned to the mission's faction theater
                 cfg = self.level_sys.current_wave_cfg
                 theater = self.environment.theater
-                enemy = Enemy(
+                enemy = create_enemy(
                     self.game,
                     random.randint(60, self.game.width - 60),
                     -40,
@@ -1968,6 +1969,10 @@ class PlayState(State):
         hits = pg.sprite.groupcollide(self.enemies, self.player_lasers, False, True)
         for enemy, lasers in hits.items():
             for laser in lasers:
+                # Check for frontal shield deflection (e.g. Aegis Defender)
+                if hasattr(enemy, "deflect_laser") and enemy.deflect_laser(laser):
+                    continue
+
                 # Spawn glowing blue sparks shooting upwards from impact point
                 spark_color = (255, 80, 0) if laser.damage > 10 else (0, 255, 255)
                 spawn_sparks(self.particles, laser.rect.centerx, laser.rect.top, (0, -1), color=spark_color, count=6)
@@ -2165,9 +2170,10 @@ class PlayState(State):
         self.particles.draw(self.canvas)
         self._draw_float_text(self.canvas)
 
-        # Sprint 14 Phase 1: Boss extra presentation (invulnerability bubble, shield barriers)
-        if self.boss_active and self.boss_instance and hasattr(self.boss_instance, "draw_extras"):
-            self.boss_instance.draw_extras(self.canvas)
+        # Sprint 14 Phase 1 & 2: Boss & Elite Enemy extra presentation (shields, sights, phantoms)
+        for enemy in self.enemies:
+            if hasattr(enemy, "draw_extras"):
+                enemy.draw_extras(self.canvas)
 
         # Sprint 14 Phase 1: Visual Telegraphs, Area Hazards & Phase Shift EMPs
         if hasattr(self, 'telegraphs') and self.telegraphs:

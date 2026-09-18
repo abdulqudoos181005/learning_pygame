@@ -44,6 +44,11 @@ class AssetsLoader:
             "enemy_scout": "alien_armada/bio_swarm/bio_scout_dart",
             "enemy_stinger": "alien_armada/crimson_raiders/crimson_wasp_stinger",
             "enemy_cruiser": "alien_armada/shadow_corps/shadow_heavy_cruiser",
+            "enemy_aegis_defender": "alien_armada/cryo_legion/cryo_dreadnought",
+            "enemy_sniper_skiff": "alien_armada/crimson_raiders/crimson_blade_interceptor",
+            "enemy_phase_phantom": "alien_armada/shadow_corps/shadow_blade_interceptor",
+            "enemy_hive_carrier": "alien_armada/bio_swarm/bio_heavy_cruiser",
+            "enemy_swarmer": "alien_armada/bio_swarm/bio_scout_dart",
             "boss": "alien_armada/boss_motherships/mothership_saucer_crimson_red",
             
             # Lasers & Projectiles
@@ -255,6 +260,32 @@ class AssetsLoader:
             pg.draw.polygon(surf, (200, 0, 50), points, 3)
             # Glowing core block
             pg.draw.rect(surf, (255, 0, 50), (w // 2 - 3, h // 2 - 10, 6, 16))
+
+        elif name in ("enemy_aegis_defender", "aegis_defender"):
+            points = [(w // 2, h - 4), (w - 6, h // 2), (w - 10, 6), (10, 6), (6, h // 2)]
+            pg.draw.polygon(surf, (50, 90, 140), points)
+            pg.draw.polygon(surf, (0, 220, 255), points, 3)
+            pg.draw.circle(surf, (0, 255, 255), (w // 2, h // 2), 10)
+
+        elif name in ("enemy_sniper_skiff", "sniper_skiff"):
+            points = [(w // 2, h - 2), (w - 6, 10), (w // 2, 18), (6, 10)]
+            pg.draw.polygon(surf, (140, 30, 40), points)
+            pg.draw.polygon(surf, (255, 60, 60), points, 2)
+            pg.draw.circle(surf, (255, 40, 40), (w // 2, h - 4), 3)
+
+        elif name in ("enemy_phase_phantom", "phase_phantom"):
+            points = [(w // 2, h - 2), (w - 4, 12), (w // 2, 8), (4, 12)]
+            pg.draw.polygon(surf, (80, 40, 110), points)
+            pg.draw.polygon(surf, (200, 80, 255), points, 2)
+
+        elif name in ("enemy_hive_carrier", "hive_carrier"):
+            points = [(w // 2, h - 6), (w - 8, h - 16), (w - 12, 10), (12, 10), (8, h - 16)]
+            pg.draw.polygon(surf, (60, 90, 50), points)
+            pg.draw.polygon(surf, (100, 255, 80), points, 3)
+
+        elif name in ("enemy_swarmer", "swarmer"):
+            points = [(w // 2, h - 2), (w - 2, 4), (2, 4)]
+            pg.draw.polygon(surf, (200, 255, 60), points)
 
         elif name == "boss":
             # Giant Boss ship (Obsidian grey shield with glowing acid-green outline and pods)

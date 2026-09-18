@@ -59,66 +59,66 @@ LEVEL_CONFIGS = [
         ],
         "boss_wave": False,
     },
-    # Level 3
+    # Level 3 - Crimson raid begins (Snipers & Shield walls)
     {
         "waves": [
-            _make_wave(7, ["scout", "stinger", "cruiser"], [0.5, 0.35, 0.15], hp_mult=1.2, spd_mult=1.1, spawn_delay=1.4),
-            _make_wave(9, ["scout", "stinger", "cruiser"], [0.45, 0.35, 0.2], hp_mult=1.2, spd_mult=1.1, spawn_delay=1.2),
+            _make_wave(7, ["scout", "stinger", "sniper_skiff"], [0.5, 0.3, 0.2], hp_mult=1.2, spd_mult=1.1, spawn_delay=1.4, formation="line"),
+            _make_wave(9, ["aegis_defender", "scout", "sniper_skiff"], [0.25, 0.5, 0.25], hp_mult=1.2, spd_mult=1.1, spawn_delay=1.2, formation="shield_wall"),
         ],
         "boss_wave": False,
     },
-    # Level 4
+    # Level 4 - Crimson raid climax (Shield wall & Ambush waves)
     {
         "waves": [
-            _make_wave(8, ["scout", "stinger", "cruiser"], [0.4, 0.4, 0.2], hp_mult=1.3, spd_mult=1.15, spawn_delay=1.3),
-            _make_wave(10, ["scout", "stinger", "cruiser"], [0.35, 0.4, 0.25], hp_mult=1.3, spd_mult=1.15, spawn_delay=1.1),
+            _make_wave(8, ["aegis_defender", "stinger", "sniper_skiff"], [0.35, 0.4, 0.25], hp_mult=1.3, spd_mult=1.15, spawn_delay=1.3, formation="shield_wall"),
+            _make_wave(10, ["phase_phantom", "cruiser", "stinger"], [0.35, 0.35, 0.3], hp_mult=1.3, spd_mult=1.15, spawn_delay=1.1, formation="ambush_wave"),
         ],
         "boss_wave": False,
     },
-    # Level 5 - BOSS
+    # Level 5 - BOSS (Goliath Dreadnought)
     {
         "waves": [
-            _make_wave(6, ["scout", "stinger"], [0.5, 0.5], hp_mult=1.3, spd_mult=1.2, spawn_delay=1.2),
+            _make_wave(7, ["aegis_defender", "sniper_skiff", "stinger", "phase_phantom"], [0.3, 0.25, 0.25, 0.2], hp_mult=1.3, spd_mult=1.2, spawn_delay=1.2, formation="shield_wall"),
             _make_boss_wave(hp_mult=1.0, spd_mult=1.0),
         ],
         "boss_wave": True,
     },
-    # Level 6
+    # Level 6 - Cryo blockade (Ambush wave & Carrier assault)
     {
         "waves": [
-            _make_wave(10, ["scout", "stinger", "cruiser"], [0.35, 0.4, 0.25], hp_mult=1.4, spd_mult=1.2, spawn_delay=1.2),
-            _make_wave(12, ["stinger", "cruiser"], [0.5, 0.5], hp_mult=1.4, spd_mult=1.2, spawn_delay=1.0),
+            _make_wave(10, ["phase_phantom", "sniper_skiff", "stinger"], [0.4, 0.3, 0.3], hp_mult=1.4, spd_mult=1.2, spawn_delay=1.2, formation="ambush_wave"),
+            _make_wave(12, ["hive_carrier", "aegis_defender", "stinger"], [0.25, 0.3, 0.45], hp_mult=1.4, spd_mult=1.2, spawn_delay=1.0, formation="carrier_assault"),
         ],
         "boss_wave": False,
     },
-    # Level 7
+    # Level 7 - Cryo blockade heavy (Shield walls & Carrier assaults)
     {
         "waves": [
-            _make_wave(10, ["scout", "stinger", "cruiser"], [0.3, 0.4, 0.3], hp_mult=1.5, spd_mult=1.25, spawn_delay=1.1),
-            _make_wave(12, ["stinger", "cruiser"], [0.45, 0.55], hp_mult=1.5, spd_mult=1.25, spawn_delay=0.9),
+            _make_wave(11, ["aegis_defender", "sniper_skiff", "cruiser"], [0.4, 0.35, 0.25], hp_mult=1.5, spd_mult=1.25, spawn_delay=1.1, formation="shield_wall"),
+            _make_wave(13, ["hive_carrier", "phase_phantom", "sniper_skiff", "stinger"], [0.25, 0.35, 0.2, 0.2], hp_mult=1.5, spd_mult=1.25, spawn_delay=0.9, formation="carrier_assault"),
         ],
         "boss_wave": False,
     },
-    # Level 8
+    # Level 8 - Shadow corps (Stealth ambush & Combined arms)
     {
         "waves": [
-            _make_wave(12, ["scout", "stinger", "cruiser"], [0.25, 0.4, 0.35], hp_mult=1.7, spd_mult=1.3, spawn_delay=1.0),
-            _make_wave(14, ["stinger", "cruiser"], [0.4, 0.6], hp_mult=1.7, spd_mult=1.3, spawn_delay=0.85),
+            _make_wave(12, ["phase_phantom", "sniper_skiff", "aegis_defender"], [0.45, 0.3, 0.25], hp_mult=1.7, spd_mult=1.3, spawn_delay=1.0, formation="ambush_wave"),
+            _make_wave(14, ["hive_carrier", "aegis_defender", "phase_phantom", "cruiser"], [0.25, 0.3, 0.25, 0.2], hp_mult=1.7, spd_mult=1.3, spawn_delay=0.85, formation="carrier_assault"),
         ],
         "boss_wave": False,
     },
-    # Level 9
+    # Level 9 - Shadow corps dread (Double carrier assault & Fortress wave)
     {
         "waves": [
-            _make_wave(12, ["stinger", "cruiser"], [0.45, 0.55], hp_mult=1.9, spd_mult=1.35, spawn_delay=0.95),
-            _make_wave(15, ["stinger", "cruiser"], [0.4, 0.6], hp_mult=1.9, spd_mult=1.35, spawn_delay=0.75),
+            _make_wave(13, ["hive_carrier", "sniper_skiff", "phase_phantom"], [0.3, 0.35, 0.35], hp_mult=1.9, spd_mult=1.35, spawn_delay=0.95, formation="carrier_assault"),
+            _make_wave(15, ["aegis_defender", "hive_carrier", "phase_phantom", "cruiser"], [0.3, 0.25, 0.25, 0.2], hp_mult=1.9, spd_mult=1.35, spawn_delay=0.75, formation="shield_wall"),
         ],
         "boss_wave": False,
     },
-    # Level 10 - FINAL BOSS
+    # Level 10 - FINAL BOSS (Grand Armada Vanguard & Apex Void Leviathan)
     {
         "waves": [
-            _make_wave(10, ["stinger", "cruiser"], [0.4, 0.6], hp_mult=2.0, spd_mult=1.4, spawn_delay=0.9),
+            _make_wave(12, ["aegis_defender", "sniper_skiff", "phase_phantom", "hive_carrier", "cruiser"], [0.25, 0.2, 0.25, 0.15, 0.15], hp_mult=2.0, spd_mult=1.4, spawn_delay=0.9, formation="shield_wall"),
             _make_boss_wave(hp_mult=2.0, spd_mult=1.3),
         ],
         "boss_wave": True,
@@ -149,6 +149,11 @@ ENEMY_ROLE_SUFFIX = {
     "scout": "scout_dart",
     "stinger": "wasp_stinger",
     "cruiser": "heavy_cruiser",
+    "aegis_defender": "dreadnought",
+    "sniper_skiff": "blade_interceptor",
+    "phase_phantom": "blade_interceptor",
+    "hive_carrier": "heavy_cruiser",
+    "swarmer": "scout_dart",
 }
 
 
@@ -310,10 +315,42 @@ class LevelSystem:
         self.spawn_queue = []
         if not self.current_wave_cfg["boss"]:
             import random
-            self.spawn_queue = [
-                random.choices(self.current_wave_cfg["types"], weights=self.current_wave_cfg["weights"])[0]
-                for _ in range(self.current_wave_cfg["count"])
-            ]
+            cfg = self.current_wave_cfg
+            types = cfg["types"]
+            weights = cfg["weights"]
+            count = cfg["count"]
+            formation = cfg.get("formation", "v_shape")
+
+            chosen = [random.choices(types, weights=weights)[0] for _ in range(count)]
+
+            # Apply tactical formation ordering
+            if formation == "shield_wall":
+                # Frontline: Aegis defenders lead the charge, followed by standard craft, then Snipers in the rear
+                def order_key(t):
+                    if t == "aegis_defender":
+                        return 0
+                    elif t in ("scout", "stinger", "cruiser"):
+                        return 1
+                    elif t == "sniper_skiff":
+                        return 2
+                    return 1
+                chosen.sort(key=order_key)
+            elif formation == "carrier_assault":
+                # Hive carriers appear early to deploy swarms
+                def order_key(t):
+                    if t == "hive_carrier":
+                        return 0
+                    return 1
+                chosen.sort(key=order_key)
+            elif formation == "ambush_wave":
+                # Ambush wave: Phase Phantoms appear deeper into the wave
+                def order_key(t):
+                    if t != "phase_phantom":
+                        return 0
+                    return 1
+                chosen.sort(key=order_key)
+
+            self.spawn_queue = chosen
 
     def tick_spawn(self, dt):
         """

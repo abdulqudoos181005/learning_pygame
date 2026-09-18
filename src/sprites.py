@@ -284,7 +284,8 @@ class Player(pg.sprite.Sprite):
     def _missile_target(self):
         state = self.game.state
         enemies = getattr(state, "enemies", ())
-        return max(enemies, key=lambda enemy: enemy.health, default=None)
+        targetable = [e for e in enemies if not getattr(e, "is_cloaked", False)]
+        return max(targetable, key=lambda enemy: enemy.health, default=None)
 
     def draw_presentation_back(self, surface):
         self.presentation.draw_back(surface)
@@ -396,6 +397,43 @@ class Enemy(pg.sprite.Sprite):
             self.max_health = int(60 * hp_mult)
             self.shoot_delay = random.uniform(2.0, 3.5)
             self.score_value = 500
+        elif self.type == "aegis_defender":
+            self.image = self.game.assets.get_image(_sprite_key("aegis_defender", "enemy_cruiser"), 64, 64)
+            self.speed_y = random.randint(45, 70) * spd_mult
+            self.speed_x = 0
+            self.max_health = int(85 * hp_mult)
+            self.shoot_delay = 2.5
+            self.score_value = 600
+            self.shield_active = True
+        elif self.type == "sniper_skiff":
+            self.image = self.game.assets.get_image(_sprite_key("sniper_skiff", "enemy_stinger"), 48, 48)
+            self.speed_y = 120 * spd_mult
+            self.speed_x = random.choice([-70, 70]) * spd_mult
+            self.max_health = int(35 * hp_mult)
+            self.shoot_delay = 2.0
+            self.score_value = 450
+        elif self.type == "phase_phantom":
+            self.image = self.game.assets.get_image(_sprite_key("phase_phantom", "enemy_scout"), 46, 46)
+            self.speed_y = 160 * spd_mult
+            self.speed_x = 0
+            self.max_health = int(45 * hp_mult)
+            self.shoot_delay = 2.5
+            self.score_value = 500
+            self.is_cloaked = True
+        elif self.type == "hive_carrier":
+            self.image = self.game.assets.get_image(_sprite_key("hive_carrier", "enemy_cruiser"), 84, 84)
+            self.speed_y = 60 * spd_mult
+            self.speed_x = 0
+            self.max_health = int(180 * hp_mult)
+            self.shoot_delay = 2.8
+            self.score_value = 800
+        elif self.type == "swarmer":
+            self.image = self.game.assets.get_image(_sprite_key("swarmer", "enemy_scout"), 22, 22)
+            self.speed_y = 250 * spd_mult
+            self.speed_x = 0
+            self.max_health = 10
+            self.shoot_delay = 9999.0
+            self.score_value = 80
         else: # default placeholder
             self.image = self.game.assets.get_image(_sprite_key("scout", "enemy_scout"), 45, 45)
             self.speed_y = 150 * spd_mult
@@ -497,6 +535,33 @@ from boss import (
     ProximityMine,
 )
 
+# Sprint 14 Phase 2: Elite Enemy Archetypes imported from modular enemies package
+from enemies import (
+    AegisDefender,
+    SniperSkiff,
+    RailgunSlug,
+    PhasePhantom,
+    HiveCarrier,
+    Swarmer,
+)
+
+
+def create_enemy(game, x, y, enemy_type="scout", hp_mult=1.0, spd_mult=1.0, armada_folder=None, laser_key=None):
+    """Factory helper to instantiate specialized enemy classes by type."""
+    if enemy_type == "aegis_defender":
+        return AegisDefender(game, x, y, hp_mult=hp_mult, spd_mult=spd_mult, armada_folder=armada_folder, laser_key=laser_key)
+    elif enemy_type == "sniper_skiff":
+        return SniperSkiff(game, x, y, hp_mult=hp_mult, spd_mult=spd_mult, armada_folder=armada_folder, laser_key=laser_key)
+    elif enemy_type == "phase_phantom":
+        return PhasePhantom(game, x, y, hp_mult=hp_mult, spd_mult=spd_mult, armada_folder=armada_folder, laser_key=laser_key)
+    elif enemy_type == "hive_carrier":
+        return HiveCarrier(game, x, y, hp_mult=hp_mult, spd_mult=spd_mult, armada_folder=armada_folder, laser_key=laser_key)
+    elif enemy_type == "swarmer":
+        return Swarmer(game, x, y, spd_mult=spd_mult, armada_folder=armada_folder)
+    else:
+        return Enemy(game, x, y, enemy_type=enemy_type, hp_mult=hp_mult, spd_mult=spd_mult, armada_folder=armada_folder, laser_key=laser_key)
+
+
 
 
 class Asteroid(pg.sprite.Sprite):
@@ -577,10 +642,12 @@ class Missile(pg.sprite.Sprite):
         self.trail = []
 
     def _find_target(self):
-        """Returns the enemy sprite with the highest current health, or None."""
+        """Returns the enemy sprite with the highest current health, or None. Skips cloaked enemies."""
         best    = None
         best_hp = -1
         for e in self.enemy_group:
+            if getattr(e, "is_cloaked", False):
+                continue
             if e.health > best_hp:
                 best_hp = e.health
                 best    = e
