@@ -82,6 +82,29 @@ class Player(pg.sprite.Sprite):
         self.missile_count = self.starting_missiles  # Stored homing missiles (activated by M key)
         self.missile_cooldown = 0.0    # Prevent spamming missiles
 
+        # Sprint 14 Phase 3: Adrenaline / Overdrive Gauge & Graze Mechanics
+        self.overdrive = 0.0
+        self.max_overdrive = 100.0
+        self.overdrive_active = False
+        self.overdrive_timer = 0.0
+        self.OVERDRIVE_DURATION = 4.0
+        self.graze_radius = 42
+        self.graze_count = 0
+
+    def add_overdrive(self, amount):
+        """Adds charge to the Overdrive gauge when not actively in Overdrive."""
+        if not self.overdrive_active:
+            self.overdrive = min(self.max_overdrive, self.overdrive + amount)
+
+    def activate_overdrive(self):
+        """Activates Overdrive mode if gauge is 100% full."""
+        if self.overdrive >= self.max_overdrive and not self.overdrive_active:
+            self.overdrive_active = True
+            self.overdrive_timer = self.OVERDRIVE_DURATION
+            self.overdrive = 0.0
+            return True
+        return False
+
     def _effective_laser_tier(self):
         """Return the currently active weapon tier after applying any power-laser pickup bonus."""
         if self.laser_power_timer > 0:
@@ -149,6 +172,11 @@ class Player(pg.sprite.Sprite):
             self.laser_power_timer -= dt
         if self.missile_cooldown > 0:
             self.missile_cooldown -= dt
+        if self.overdrive_active:
+            self.overdrive_timer -= dt
+            if self.overdrive_timer <= 0:
+                self.overdrive_active = False
+                self.overdrive_timer = 0.0
         self.recoil_timer = max(0.0, self.recoil_timer - dt)
         self.hit_stutter = max(0.0, self.hit_stutter - dt)
         self.muzzle_timer = max(0.0, self.muzzle_timer - dt)
@@ -237,9 +265,26 @@ class Player(pg.sprite.Sprite):
         elif not is_missile:
             self.missile_hold_timer = 0.0
 
+        # Sprint 14 Phase 3: Trigger Overdrive via InputMap or keyboard shortcut (F or SPACE+M)
+        is_overdrive = False
+        if inp:
+            is_overdrive = inp.is_pressed("overdrive")
+        else:
+            keys = pg.key.get_pressed()
+            is_overdrive = keys[pg.K_f] or (keys[pg.K_SPACE] and keys[pg.K_m])
+
+        if is_overdrive and self.overdrive >= self.max_overdrive and not self.overdrive_active:
+            state = getattr(self.game, 'state', None)
+            if state and hasattr(state, 'activate_player_overdrive'):
+                state.activate_player_overdrive()
+            else:
+                self.activate_overdrive()
+
     def shoot(self):
         if self.shoot_timer <= 0:
-            self.shoot_timer = self.shoot_cooldown
+            # Overdrive grants 2x supercharged firing rate
+            effective_cooldown = self.shoot_cooldown * 0.5 if self.overdrive_active else self.shoot_cooldown
+            self.shoot_timer = effective_cooldown
             self.recoil_timer = 0.06
             self.muzzle_timer = 0.07
             if hasattr(self.game, 'audio') and self.game.audio:
@@ -331,6 +376,7 @@ class Laser(pg.sprite.Sprite):
         self.fx = float(x)
         self.fy = float(y)
         self.trail = []
+        self.grazed = False  # Sprint 14 Phase 3: Tracks near-miss bullet grazing
         
         # Resolve speed into X/Y components accounting for angle
         if is_player:
@@ -721,3 +767,58 @@ class PowerUp(pg.sprite.Sprite):
         # Clean up if it falls off bottom screen
         if self.rect.top > self.game.height:
             self.kill()
+
+
+class ScoreCrystal(pg.sprite.Sprite):
+    """
+    Score Crystal — Transmuted from enemy bullets by the Overdrive EMP burst.
+    
+    Magnetizes rapidly toward the player, awarding 150 bonus score and tactile feedback.
+    """
+    SPEED = 180.0
+    MAX_SPEED = 650.0
+    ACCELERATION = 900.0
+
+    def __init__(self, game, x, y):
+        super().__init__()
+        self.game = game
+        self.score_value = 150
+        self.image = self.game.assets.get_image("score_crystal", 18, 18)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.fx = float(x)
+        self.fy = float(y)
+        self.vx = random.uniform(-60.0, 60.0)
+        self.vy = random.uniform(-80.0, -10.0)
+        self.lifetime = 8.0
+        self.magnet_radius = 550.0
+
+    def update(self, dt):
+        self.lifetime -= dt
+        if self.lifetime <= 0 or self.rect.top > self.game.height + 40:
+            self.kill()
+            return
+
+        state = getattr(self.game, 'state', None)
+        player = getattr(state, 'player', None)
+        if player and hasattr(player, 'rect'):
+            dx = player.rect.centerx - self.fx
+            dy = player.rect.centery - self.fy
+            dist = math.hypot(dx, dy)
+            if dist < self.magnet_radius and dist > 1.0:
+                nx = dx / dist
+                ny = dy / dist
+                self.vx += nx * self.ACCELERATION * dt
+                self.vy += ny * self.ACCELERATION * dt
+                spd = math.hypot(self.vx, self.vy)
+                if spd > self.MAX_SPEED:
+                    self.vx = (self.vx / spd) * self.MAX_SPEED
+                    self.vy = (self.vy / spd) * self.MAX_SPEED
+            else:
+                self.vy += 80.0 * dt
+        else:
+            self.vy += 80.0 * dt
+
+        self.fx += self.vx * dt
+        self.fy += self.vy * dt
+        self.rect.center = (int(self.fx), int(self.fy))
+

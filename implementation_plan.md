@@ -1399,37 +1399,63 @@ graph TD
 
 ---
 
-### Phase 3: Tactical Player Abilities & Combat Juice
+### Phase 3: Tactical Player Abilities & Combat Juice — ✅ COMPLETE
 
-#### 1. Adrenaline / Overdrive Ultimate & Bullet Graze (`src/sprites.py`, `src/states.py`)
+#### 1. Adrenaline / Overdrive Ultimate & Bullet Graze (`src/sprites.py`, `src/states.py`) — ✅ DONE
 - **Graze System (Near-Miss Mechanics):**
-  - Detects enemy bullets passing closely to player hitbox without colliding.
-  - Awards bonus score and rapidly charges the Overdrive meter with a satisfying spark particle effect and soft audio chime.
-- **Overdrive Meter & Activation (Key `F` or `SPACE+M`):**
-  - **EMP Burst:** Clears all standard enemy bullets on screen, converting them into collectible bonus score crystals.
-  - **Bullet Time Dilation:** Slows enemy/bullet movement speed to 50% for 4.0 seconds while the player maintains full movement agility and supercharged firing rate.
-  - Custom UI Overdrive bar next to health/shield in the HUD.
+  - Proximity detection checks enemy lasers passing within `player.graze_radius` (42px) without intersecting the ship hitbox.
+  - Awards `+50` bonus score (scaled by combo multiplier) and charges the Overdrive gauge by `+12%` per graze.
+  - Spawns cyan spark particle bursts and plays dedicated audio feedback chimes (`audio.play_graze_sfx`).
+  - Flags projectiles (`laser.grazed = True`) to ensure single-graze rewards per bullet.
+- **Overdrive Meter & Activation (Key `F` or `SPACE+M` / Gamepad `Y`/`LB`):**
+  - Segmented Overdrive HUD gauge rendered alongside Health & Shield meters in the center dashboard (`src/ui/hud.py`).
+  - **EMP Shockwave:** Activates full-screen EMP blast clearing all incoming enemy lasers and transmuting them into collectible `ScoreCrystal` pickups (+150 pts each).
+  - **Bullet Time Dilation:** Slows enemy movement, enemy weapon projectiles, and hazards by 50% (`enemy_dt = eff_dt * 0.5`) for 4.0 seconds while the player maintains full agility and supercharged 2× firing rate (`shoot_cooldown * 0.5`).
+  - Collectible `ScoreCrystal`s feature homing magnetic attraction toward the player ship with acceleration physics.
 
-#### 2. Impact Feel & Game Juice (`src/fx.py`, `src/render/pipeline.py`, `src/audio/director.py`)
-- **Hit-Stop (Micro-Freeze):** 1-2 frame freeze on defeating elite enemies or boss phase transitions for punchy tactile impact.
-- **Screen Flash & Chromatic Pulses:** Brief white flash on critical boss damage or EMP activation.
-- **Dynamic Audio Ducking:** Combat sounds duck momentarily during Overdrive activation, replaced by a deep bass hum and ticking clock sound effect.
+#### 2. Impact Feel & Game Juice (`src/fx.py`, `src/render/pipeline.py`, `src/audio/director.py`) — ✅ DONE
+- **Tactile Hit-Stop (Micro-Freeze):** 1-2 frame camera freeze (`trigger_hit_stop(0.045)`) engaged on defeating elite enemy archetypes (`AegisDefender`, `SniperSkiff`, `PhasePhantom`, `HiveCarrier`), shattering boss phase thresholds, or activating Overdrive.
+- **Screen Flash & Chromatic Aberration Pulses (`src/render/pipeline.py`):**
+  - `pipeline.trigger_flash(duration, color)` delivers bright screen flash overlays on EMP burst and critical boss breaks.
+  - `pipeline.trigger_chromatic(duration, intensity)` delivers dynamic red/blue channel split pulses during heavy shockwaves.
+- **Dynamic Audio Ducking & Overdrive Surge (`src/audio/director.py`):**
+  - Heavy audio ducking (`factor=0.25`) dips background combat music and standard weapon chatter.
+  - Triggers an electric overdrive surge / bass resonance across the soundstage.
 
 ---
 
 ### Verification Plan & Test Strategy
 
-#### Automated Unit & Integration Tests (`tests/test_sprint14_combat.py`)
-- Test telegraph system timers, states, and coordinate math.
-- Test multi-phase boss transitions, health segmentation, and invulnerability windows.
-- Test all 4 new enemy archetypes: Aegis shield deflection, Sniper aim & fire sequence, Phase Phantom cloak toggle, Hive Carrier drone spawning.
-- Test Graze proximity collision logic and Overdrive meter charging.
-- Test Overdrive activation: bullet conversion to crystals, time dilation factor calculation.
+#### Automated Unit & Integration Tests (`tests/test_sprint14_combat.py`) — ✅ 20/20 PASSED
+- `test_laser_sightline_lifecycle` — Telegraph aim, lock, fire, and hit checks.
+- `test_ring_hazard_lifecycle_and_damage` — Radial blast expansion and damage zones.
+- `test_conical_hazard_arc_detection` — Angular arc sweep calculations and hit tests.
+- `test_phase_emp_blast_projectile_clearing` — Shockwave bullet neutralization.
+- `test_boss_phase_notification_lifecycle` — Animated phase transition banners.
+- `test_goliath_dreadnought_phases_and_weapons` — Level 5 Dreadnought 3-phase combat, shields, and mines.
+- `test_apex_void_leviathan_meltdown_and_supernova` — Level 10 Leviathan Danmaku & Supernova countdown.
+- `test_segmented_boss_hud_rendering` — Diamond phase dividers, damage trail, and shield overlay.
+- `test_aegis_defender_shield_and_overheat` — Frontal directional shield laser deflection and overheat cycle.
+- `test_sniper_skiff_railgun_aim_and_fire` — Railgun trajectory aiming and high-velocity slug discharge.
+- `test_phase_phantom_cloaking_and_ambush` — Cloak opacity, missile untargetability, and shotgun ambush.
+- `test_hive_carrier_and_swarmer_deployment` — Carrier mothership and homing micro-drone swarms.
+- `test_tactical_formations_and_level_configs` — Level 3–10 tactical formations and spawn queues.
+- `test_graze_detection_and_overdrive_charge` — Near-miss graze detection, scoring, and Overdrive charging.
+- `test_overdrive_meter_activation_and_duration` — Gauge filling, activation, 2x fire rate, and decay.
+- `test_emp_burst_and_score_crystal_conversion` — EMP bullet clearing and magnetic crystal collection.
+- `test_bullet_time_dilation_factor` — 50% enemy time dilation factor during Overdrive.
+- `test_render_pipeline_flash_and_chromatic_pulses` — Flash and chromatic aberration pulses.
+- `test_audio_director_overdrive_and_graze` — Audio ducking and sound design triggers.
+- `test_hud_overdrive_gauge_rendering` — HUD Overdrive gauge rendering in charging, ready, and active states.
+
+#### Project-Wide Test Suite (`tests/`) — ✅ 76/76 PASSED
+- All existing tests across Sprints 1–13 (UI, fonts, pipeline, databases, accounts, audio) continue to pass with 0 regressions.
 
 #### Manual Verification
-- Play Level 5 to verify Goliath Dreadnought phase 1 -> 2 -> 3 transitions and audio cues.
-- Play Level 10 to verify Apex Void Leviathan Danmaku patterns and Supernova DPS check.
-- Verify Overdrive trigger feel with keyboard (`F`) and graze audio/visual feedback.
+- Play Level 5 to experience Goliath Dreadnought phase 1 -> 2 -> 3 transitions.
+- Play Level 10 to test Apex Void Leviathan Danmaku patterns and Supernova DPS check.
+- Test Graze mechanics by skimming past enemy laser streams and activate Overdrive with `F` key to trigger bullet time, EMP transmutations, and screen juice.
+
 
 
 

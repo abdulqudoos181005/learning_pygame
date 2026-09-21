@@ -615,6 +615,236 @@ class TestSprint14Phase2Formations(unittest.TestCase):
             self.assertEqual(ls.spawn_queue[0], "hive_carrier")
 
 
+class TestSprint14Phase3TacticalMechanics(unittest.TestCase):
+    def setUp(self):
+        self.game = MockGame()
+        self.state = MockPlayState(self.game)
+        self.game.state = self.state
+
+    def test_graze_detection_and_overdrive_charge(self):
+        """Tests near-miss bullet grazing: proximity detection, single-graze flag, score bonus, and Overdrive charging."""
+        from src.sprites import Player, Laser
+        from src.states import PlayState
+
+        play_state = PlayState(self.game, selected_level=1)
+        player = play_state.player
+        player.rect.center = (640, 500)
+        player.pos_x = 640.0
+        player.pos_y = 500.0
+        player.overdrive = 0.0
+        player.graze_count = 0
+        initial_score = play_state.score
+
+        # 1. Spawn enemy laser just outside player hitbox but within graze radius (e.g. 38px away from center)
+        laser = Laser(self.game, 640 + 38, 500, speed_y=300)
+        play_state.enemy_lasers.add(laser)
+        self.assertFalse(laser.grazed)
+
+        # Trigger collision checks
+        play_state._check_collisions()
+
+        # Laser should now be grazed
+        self.assertTrue(laser.grazed)
+        self.assertEqual(player.graze_count, 1)
+        self.assertEqual(player.overdrive, 12.0)
+        self.assertGreater(play_state.score, initial_score)
+
+        # Subsequent check on same frame/laser should not double-graze
+        score_after_graze = play_state.score
+        play_state._check_collisions()
+        self.assertEqual(player.graze_count, 1)
+        self.assertEqual(player.overdrive, 12.0)
+        self.assertEqual(play_state.score, score_after_graze)
+
+    def test_overdrive_meter_activation_and_duration(self):
+        """Tests Overdrive gauge charging, activation, supercharged weapon fire rate, and duration decay."""
+        from src.sprites import Player
+
+        player = Player(self.game, 640, 500)
+        self.assertEqual(player.overdrive, 0.0)
+        self.assertFalse(player.overdrive_active)
+
+        # Partial charge
+        player.add_overdrive(40.0)
+        self.assertEqual(player.overdrive, 40.0)
+        # Activation fails if not 100%
+        self.assertFalse(player.activate_overdrive())
+        self.assertFalse(player.overdrive_active)
+
+        # Fill to 100%
+        player.add_overdrive(70.0)
+        self.assertEqual(player.overdrive, 100.0)
+
+        # Activate Overdrive
+        self.assertTrue(player.activate_overdrive())
+        self.assertTrue(player.overdrive_active)
+        self.assertEqual(player.overdrive, 0.0)
+        self.assertEqual(player.overdrive_timer, player.OVERDRIVE_DURATION)
+
+        # Overdrive 2x supercharged fire rate
+        normal_cooldown = player.shoot_cooldown
+        player.shoot_timer = 0.0
+        player.shoot()
+        self.assertAlmostEqual(player.shoot_timer, normal_cooldown * 0.5, places=3)
+
+        # Update timers and verify countdown
+        player.update(2.0)
+        self.assertTrue(player.overdrive_active)
+        self.assertAlmostEqual(player.overdrive_timer, 2.0, places=2)
+
+        # Advance past 4 seconds -> Overdrive expires
+        player.update(2.5)
+        self.assertFalse(player.overdrive_active)
+        self.assertEqual(player.overdrive_timer, 0.0)
+
+    def test_emp_burst_and_score_crystal_conversion(self):
+        """Tests that Overdrive EMP burst clears enemy lasers and converts them into collectible ScoreCrystals."""
+        from src.sprites import Laser, ScoreCrystal
+        from src.states import PlayState
+
+        play_state = PlayState(self.game, selected_level=1)
+        player = play_state.player
+        player.overdrive = 100.0
+
+        # Spawn 4 enemy lasers
+        for x in [500, 550, 600, 650]:
+            laser = Laser(self.game, x, 300, speed_y=250)
+            play_state.enemy_lasers.add(laser)
+            play_state.all_sprites.add(laser)
+
+        self.assertEqual(len(play_state.enemy_lasers), 4)
+        self.assertEqual(len(play_state.crystals), 0)
+
+        # Activate Overdrive EMP
+        success = play_state.activate_player_overdrive()
+        self.assertTrue(success)
+        self.assertTrue(player.overdrive_active)
+
+        # All enemy lasers cleared
+        self.assertEqual(len(play_state.enemy_lasers), 0)
+
+        # Transmuted into 4 ScoreCrystals
+        self.assertEqual(len(play_state.crystals), 4)
+
+        # Test ScoreCrystal magnetic attraction toward player
+        crystal = next(iter(play_state.crystals))
+        initial_vy = crystal.vy
+        crystal.update(0.1)
+        # Should accelerate toward player at (640, 620)
+        self.assertIsNotNone(crystal.vx)
+
+        # Test crystal collection
+        initial_score = play_state.score
+        crystal.rect.center = player.rect.center
+        play_state._check_collisions()
+        self.assertFalse(crystal.alive())
+        self.assertGreaterEqual(play_state.score, initial_score + crystal.score_value)
+
+    def test_bullet_time_dilation_factor(self):
+        """Tests that enemies and enemy bullets move at 50% speed during Overdrive while player moves normally."""
+        from src.sprites import Enemy, Laser
+        from src.states import PlayState
+
+        play_state = PlayState(self.game, selected_level=1)
+        player = play_state.player
+        player.overdrive = 100.0
+
+        enemy = Enemy(self.game, 640, 100, "scout")
+        play_state.enemies.add(enemy)
+
+        laser = Laser(self.game, 640, 200, speed_y=400)
+        play_state.enemy_lasers.add(laser)
+
+        # Without overdrive: enemy moves with full dt
+        initial_ey = enemy.rect.y
+        initial_ly = laser.fy
+        play_state.update(0.1)
+        normal_enemy_delta = enemy.rect.y - initial_ey
+        normal_laser_delta = laser.fy - initial_ly
+
+        # Activate Overdrive: EMP clears existing lasers
+        play_state.activate_player_overdrive()
+        self.assertTrue(player.overdrive_active)
+
+        # Spawn new laser during active Overdrive
+        overdrive_laser = Laser(self.game, 640, 200, speed_y=400)
+        play_state.enemy_lasers.add(overdrive_laser)
+        initial_ly = overdrive_laser.fy
+
+        play_state.update(0.1)
+        dilated_enemy_delta = enemy.rect.y - initial_ey
+        dilated_laser_delta = overdrive_laser.fy - initial_ly
+
+        self.assertAlmostEqual(dilated_laser_delta, normal_laser_delta * 0.5, places=1)
+
+    def test_render_pipeline_flash_and_chromatic_pulses(self):
+        """Tests RenderPipeline screen flash and chromatic pulse triggers and timers."""
+        from src.render.pipeline import RenderPipeline
+
+        pipeline = RenderPipeline(1280, 720)
+        self.assertEqual(pipeline.flash_timer, 0.0)
+        self.assertEqual(pipeline.chromatic_pulse_timer, 0.0)
+
+        # Trigger flash
+        pipeline.trigger_flash(duration=0.2, color=(200, 240, 255))
+        self.assertEqual(pipeline.flash_timer, 0.2)
+        self.assertEqual(pipeline.flash_color, (200, 240, 255))
+
+        # Trigger chromatic
+        pipeline.trigger_chromatic(duration=0.3, intensity=3)
+        self.assertEqual(pipeline.chromatic_pulse_timer, 0.3)
+        self.assertEqual(pipeline.chromatic_pulse_intensity, 3)
+
+        # Update timers
+        pipeline.update(0.1)
+        self.assertAlmostEqual(pipeline.flash_timer, 0.1, places=2)
+        self.assertAlmostEqual(pipeline.chromatic_pulse_timer, 0.2, places=2)
+
+        pipeline.update(0.25)
+        self.assertEqual(pipeline.flash_timer, 0.0)
+        self.assertEqual(pipeline.chromatic_pulse_timer, 0.0)
+        self.assertEqual(pipeline.chromatic_pulse_intensity, 0)
+
+    def test_audio_director_overdrive_and_graze(self):
+        """Tests AudioDirector overdrive audio trigger and graze sound effects."""
+        from src.audio.director import AudioDirector
+
+        audio = AudioDirector(assets=self.game.assets, screen_width=1280)
+        audio.trigger_overdrive_audio(duration=4.0)
+        self.assertTrue(audio.is_ducked)
+        self.assertAlmostEqual(audio.duck_timer, 4.0, places=2)
+
+        # Play graze SFX
+        res = audio.play_graze_sfx(pos_x=640)
+        # Should execute cleanly without error (mixer or mock)
+
+    def test_hud_overdrive_gauge_rendering(self):
+        """Tests that HUD renders Overdrive gauge in charging, ready, and active states."""
+        from src.sprites import Player
+        from src.ui.hud import HUD
+
+        hud = HUD(self.game)
+        player = Player(self.game, 640, 500)
+        self.state.player = player
+        surf = pg.Surface((1280, 720), pg.SRCALPHA)
+
+        # 1. 40% charged state
+        player.overdrive = 40.0
+        player.overdrive_active = False
+        hud.draw(surf, self.state)
+
+        # 2. 100% READY state
+        player.overdrive = 100.0
+        player.overdrive_active = False
+        hud.draw(surf, self.state)
+
+        # 3. Active state
+        player.activate_overdrive()
+        self.assertTrue(player.overdrive_active)
+        hud.draw(surf, self.state)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

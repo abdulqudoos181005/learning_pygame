@@ -121,6 +121,47 @@ class HUD:
         sh_lbl = assets.hud_font.render(f"SH {int(player.shield)}/{int(player.max_shield)}", True, (180, 230, 255))
         surface.blit(sh_lbl, (center_x - sh_lbl.get_width() - 10, 35))
 
+        # Overdrive / Adrenaline Meter: Segmented purple/amber container
+        od_y = 55
+        pg.draw.rect(surface, (35, 15, 45), (center_x - 1, od_y - 1, bar_w + 2, bar_h + 2), border_radius=4)
+        
+        is_od_active = getattr(player, 'overdrive_active', False)
+        od_val = getattr(player, 'overdrive', 0.0)
+        od_max = getattr(player, 'max_overdrive', 100.0)
+        od_timer = getattr(player, 'overdrive_timer', 0.0)
+        od_dur = getattr(player, 'OVERDRIVE_DURATION', 4.0)
+
+        if is_od_active:
+            # Active overdrive countdown (electric cyan)
+            od_ratio = max(0.0, min(1.0, od_timer / max(0.1, od_dur)))
+            od_color = (0, 240, 255)
+            border_color = (255, 220, 80)
+            status_text = f"OVERDRIVE {od_timer:.1f}s"
+        elif od_val >= od_max:
+            # Ready state (glowing amber/violet pulse)
+            od_ratio = 1.0
+            pulse_tick = (pg.time.get_ticks() % 1000) / 1000.0
+            border_color = (255, 230, 80) if pulse_tick < 0.5 else (180, 70, 255)
+            od_color = (255, 190, 30)
+            status_text = "READY [F]"
+        else:
+            od_ratio = max(0.0, min(1.0, od_val / max(1.0, od_max)))
+            border_color = (120, 45, 160)
+            od_color = (180, 70, 255)
+            status_text = f"OD {int(od_val)}%"
+
+        pg.draw.rect(surface, border_color, (center_x - 1, od_y - 1, bar_w + 2, bar_h + 2), 1, border_radius=4)
+        od_fill = int(od_ratio * bar_w)
+        if od_fill > 0:
+            pg.draw.rect(surface, od_color, (center_x, od_y, od_fill, bar_h), border_radius=3)
+            for seg in range(1, 6):
+                seg_x = center_x + int(seg * (bar_w / 6))
+                if seg_x < center_x + od_fill:
+                    pg.draw.line(surface, (80, 20, 110), (seg_x, od_y), (seg_x, od_y + bar_h - 1), 1)
+
+        od_lbl = assets.hud_font.render(status_text, True, (240, 200, 255))
+        surface.blit(od_lbl, (center_x - od_lbl.get_width() - 10, od_y - 2))
+
         # 4. LIVES SHIP ICONS (Bottom Left stack)
         hull_name = getattr(player, 'hull_type', 'interceptor')
         color_name = getattr(player, 'color_name', 'blue')
@@ -166,7 +207,7 @@ class HUD:
             boss_bar_w = 500
             boss_bar_h = 18
             boss_bar_x = width // 2 - boss_bar_w // 2
-            boss_bar_y = 56
+            boss_bar_y = 74
 
             # A. Boss Nameplate & Phase Badge
             boss_title = getattr(boss, 'boss_title', 'BOSS ENCOUNTER')

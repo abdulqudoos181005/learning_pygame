@@ -3,7 +3,7 @@ import pygame as pg
 import random
 import math
 from sprites import (
-    Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid,
+    Player, Enemy, Laser, Boss, PowerUp, Missile, Asteroid, ScoreCrystal,
     GoliathDreadnought, ApexVoidLeviathan, OrbitalShieldBit, EscortDrone, ProximityMine,
     AegisDefender, SniperSkiff, PhasePhantom, HiveCarrier, Swarmer, create_enemy
 )
@@ -1591,6 +1591,7 @@ class PlayState(State):
         self.player_lasers = pg.sprite.Group()
         self.enemy_lasers  = pg.sprite.Group()
         self.powerups      = pg.sprite.Group()
+        self.crystals      = pg.sprite.Group()   # Sprint 14 Phase 3: Transmuted EMP score crystals
         self.particles     = pg.sprite.Group()
         self.missiles      = pg.sprite.Group()   # Sprint 2: homing missiles group
         self.asteroids     = pg.sprite.Group()   # Sprint 6: hazard rocks
@@ -1872,11 +1873,72 @@ class PlayState(State):
                     return
 
         # 5. SPRITE & PARTICLE PHYSICS
-        self.all_sprites.update(dt)
-        self.particles.update(dt)
+        # Sprint 14 Phase 3: Bullet Time Dilation and Hit-Stop Physics
+        eff_dt = self.camera.get_effective_dt(dt) if hasattr(self, 'camera') else dt
+        enemy_dt = eff_dt * 0.5 if self.player.overdrive_active else eff_dt
+
+        # Player simulation runs at full agile speed (eff_dt)
+        self.player_group.update(eff_dt)
+        self.player_lasers.update(eff_dt)
+        self.missiles.update(eff_dt)
+        self.powerups.update(eff_dt)
+        self.crystals.update(eff_dt)
+        self.particles.update(eff_dt)
+
+        # Enemies & hazards undergo time dilation during Overdrive (enemy_dt)
+        self.enemies.update(enemy_dt)
+        self.enemy_lasers.update(enemy_dt)
+        self.asteroids.update(enemy_dt)
 
         # 6. COLLISION CHECKS
         self._check_collisions()
+
+    def activate_player_overdrive(self):
+        """
+        Sprint 14 Phase 3: Adrenaline / Overdrive Ultimate Activation.
+        - Triggers player overdrive mode (supercharged 2x fire rate, full agility).
+        - Discharges screen-clearing EMP Burst transmuting enemy lasers into score crystals.
+        - Triggers dramatic hit-stop, screen shake, chromatic pulse, screen flash, and audio ducking.
+        """
+        if not self.player.activate_overdrive():
+            return False
+
+        # 1. Transmute all enemy lasers on screen into Score Crystals
+        lasers_cleared = list(self.enemy_lasers)
+        for laser in lasers_cleared:
+            crystal = ScoreCrystal(self.game, laser.rect.centerx, laser.rect.centery)
+            self.crystals.add(crystal)
+            self.all_sprites.add(crystal)
+            spawn_sparks(self.particles, laser.rect.centerx, laser.rect.centery, (0, 0), color=(0, 240, 255), count=6)
+            laser.kill()
+
+        # 2. Camera impact & Hit-stop
+        if hasattr(self, 'camera'):
+            self.camera.trigger_hit_stop(0.06)
+        self.trigger_shake(0.35, 8)
+
+        # 3. Screen Flash & Chromatic Pulse
+        if hasattr(self, 'pipeline'):
+            self.pipeline.trigger_flash(0.22, color=(200, 240, 255))
+            self.pipeline.trigger_chromatic(0.35, intensity=3)
+
+        # 4. Audio Ducking & Overdrive Surge
+        if hasattr(self.game, 'audio') and self.game.audio:
+            self.game.audio.trigger_overdrive_audio(self.player.OVERDRIVE_DURATION)
+        elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+            self.game.assets.get_sound("powerup").play()
+
+        # 5. Combat feedback text
+        self.spawn_floating_text(
+            self.player.rect.centerx,
+            self.player.rect.top - 25,
+            "⚡ OVERDRIVE ENGAGED ⚡",
+            color=(255, 230, 80),
+            life=1.2,
+            drift_y=-35,
+        )
+        return True
+
 
     def _draw_float_text(self, canvas):
         """Renders floating battle feedback text for rewards and damage."""
@@ -1984,7 +2046,7 @@ class PlayState(State):
                     points = int(enemy.score_value * self.combo_multiplier)
                     self.score += points
                     self.kills_since_powerup += 1
-                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
+                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points, enemy=enemy)
                     # Large orange radial explosion
                     spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery, color=(255, 120, 0), count=25)
                     if hasattr(self.game, 'audio') and self.game.audio:
@@ -2009,12 +2071,46 @@ class PlayState(State):
                     points = int(enemy.score_value * self.combo_multiplier)
                     self.score += points
                     self.kills_since_powerup += 1
-                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points)
+                    self._register_kill(enemy.rect.centerx, enemy.rect.top, points, enemy=enemy)
                     if hasattr(self.game, 'audio') and self.game.audio:
                         self.game.audio.play_sfx("zap", pos_x=enemy.rect.centerx, volume_mult=0.9)
                     elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                         self.game.assets.get_sound("zap").play()
                     self._try_drop_powerup(enemy)
+
+        # 2.5 Sprint 14 Phase 3: Bullet Graze & Score Crystals
+        # Near-miss Bullet Grazing detection
+        graze_dist_sq = (self.player.graze_radius + 10) ** 2
+        for elaser in self.enemy_lasers:
+            if not getattr(elaser, "grazed", False):
+                dx = elaser.rect.centerx - self.player.rect.centerx
+                dy = elaser.rect.centery - self.player.rect.centery
+                dist_sq = dx * dx + dy * dy
+                if dist_sq <= graze_dist_sq and not self.player.rect.colliderect(elaser.rect):
+                    elaser.grazed = True
+                    self.player.graze_count += 1
+                    self.player.add_overdrive(12.0)
+                    graze_pts = int(50 * self.combo_multiplier)
+                    self.score += graze_pts
+                    spawn_sparks(self.particles, elaser.rect.centerx, elaser.rect.centery, (0, 0), color=(100, 240, 255), count=6)
+                    self.spawn_floating_text(elaser.rect.centerx, elaser.rect.centery - 10, f"GRAZE +{graze_pts}", color=(100, 240, 255), life=0.5, drift_y=-25)
+                    if hasattr(self.game, 'audio') and self.game.audio:
+                        self.game.audio.play_graze_sfx(elaser.rect.centerx)
+                    elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                        self.game.assets.get_sound("graze").play()
+
+        # Score Crystals Collection
+        if hasattr(self, 'crystals'):
+            collected_crystals = pg.sprite.spritecollide(self.player, self.crystals, True)
+            for crystal in collected_crystals:
+                pts = int(crystal.score_value * self.combo_multiplier)
+                self.score += pts
+                spawn_sparks(self.particles, crystal.rect.centerx, crystal.rect.centery, (0, 0), color=(0, 240, 255), count=8)
+                self.spawn_floating_text(crystal.rect.centerx, crystal.rect.centery - 10, f"+{pts}", color=(0, 255, 230), life=0.6, drift_y=-30)
+                if hasattr(self.game, 'audio') and self.game.audio:
+                    self.game.audio.play_sfx("powerup", pos_x=crystal.rect.centerx, volume_mult=0.5)
+                elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                    self.game.assets.get_sound("powerup").play()
 
         # 3. Enemy lasers hitting Player ship
         # pg.sprite.spritecollide checks one sprite against a group.
@@ -2110,10 +2206,26 @@ class PlayState(State):
                 # Add one homing missile to inventory (Sprint 2 new)
                 self.player.missile_count += 1
 
-    def _register_kill(self, x, y, points):
-        """Sprint 7: Update combo chain after an enemy kill and show combo text."""
+    def _register_kill(self, x, y, points, enemy=None):
+        """Sprint 7 & 14: Update combo chain, award Overdrive charge, and trigger hit-stop on kills."""
         self.combo_count += 1
         self.combo_timer = self.COMBO_WINDOW  # restart the decay window
+
+        # Sprint 14 Phase 3: Overdrive charge on kill & Elite Hit-Stop
+        is_elite = False
+        if enemy is not None:
+            etype = getattr(enemy, "type", "")
+            is_elite = etype in ("aegis_defender", "sniper_skiff", "phase_phantom", "hive_carrier") or isinstance(enemy, (Boss, GoliathDreadnought, ApexVoidLeviathan))
+
+        if is_elite:
+            self.player.add_overdrive(12.0)
+            if hasattr(self, 'camera'):
+                self.camera.trigger_hit_stop(0.045)
+            if hasattr(self, 'pipeline'):
+                self.pipeline.trigger_flash(0.10, (255, 255, 255))
+        else:
+            self.player.add_overdrive(4.0)
+
         if self.combo_count > 1:
             # Increase multiplier (step each kill, cap at COMBO_CAP)
             old_mult = self.combo_multiplier
