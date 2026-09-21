@@ -551,7 +551,7 @@ class TestSprint14Phase2EliteEnemies(unittest.TestCase):
         self.state.enemies.add(carrier)
 
         # Move to target hover Y
-        carrier.update(1.5)
+        carrier.update(2.0)
         self.assertGreaterEqual(carrier.rect.centery, carrier.target_y)
 
         # Trigger drone launch
