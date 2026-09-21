@@ -19,7 +19,7 @@ class InputMap:
     KEY_NAMES_TO_PG = {
         "w": pg.K_w, "s": pg.K_s, "a": pg.K_a, "d": pg.K_d,
         "up": pg.K_UP, "down": pg.K_DOWN, "left": pg.K_LEFT, "right": pg.K_RIGHT,
-        "space": pg.K_SPACE, "j": pg.K_j, "k": pg.K_k, "m": pg.K_m,
+        "space": pg.K_SPACE, "j": pg.K_j, "k": pg.K_k, "m": pg.K_m, "f": pg.K_f,
         "p": pg.K_p, "escape": pg.K_ESCAPE, "return": pg.K_RETURN,
         "lshift": pg.K_LSHIFT, "rshift": pg.K_RSHIFT,
     }
@@ -32,13 +32,14 @@ class InputMap:
             "right": "d",
             "fire": "space",
             "missile": "m",
+            "overdrive": "f",
             "pause": "p",
         }
         if keybinds and isinstance(keybinds, dict):
             self.keybinds.update(keybinds)
 
         # Internal action tracking
-        self.actions_held = {k: False for k in ("up", "down", "left", "right", "fire", "missile", "pause", "confirm", "cancel")}
+        self.actions_held = {k: False for k in ("up", "down", "left", "right", "fire", "missile", "overdrive", "pause", "confirm", "cancel")}
         self.actions_pressed = {k: False for k in self.actions_held}
         self.actions_released = {k: False for k in self.actions_held}
 
@@ -102,6 +103,7 @@ class InputMap:
             elif action == "left": held = held or keys[pg.K_LEFT]
             elif action == "right": held = held or keys[pg.K_RIGHT]
             elif action == "fire": held = held or keys[pg.K_j] or keys[pg.K_SPACE]
+            elif action == "overdrive": held = held or keys[pg.K_f] or (keys[pg.K_SPACE] and keys[pg.K_m])
             elif action == "pause": held = held or keys[pg.K_ESCAPE] or keys[pg.K_p]
 
             current_held[action] = held
@@ -138,6 +140,10 @@ class InputMap:
                     current_held["confirm"] = True
                 if num_buttons > 1 and self.joystick.get_button(1):  # B Button -> Cancel
                     current_held["cancel"] = True
+                if num_buttons > 3 and self.joystick.get_button(3):  # Y / Triangle -> Overdrive
+                    current_held["overdrive"] = True
+                if num_buttons > 4 and self.joystick.get_button(4):  # LB Button -> Overdrive
+                    current_held["overdrive"] = True
                 if num_buttons > 5 and self.joystick.get_button(5):  # RB Button -> Missile
                     current_held["missile"] = True
                 if num_buttons > 7 and self.joystick.get_button(7):  # Start Button -> Pause
