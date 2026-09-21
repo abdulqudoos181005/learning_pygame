@@ -65,6 +65,7 @@ class AssetsLoader:
             "powerup_power_laser": "powerups_pickups/powerup_orbs/orb_bolt_red",
             "powerup_missile": "powerups_pickups/powerup_orbs/orb_bolt_yellow",
             "powerup_speed": "powerups_pickups/medical_capsules/capsule_velocity_yellow",
+            "score_crystal": "powerups_pickups/powerup_orbs/orb_star_red",
             
             # Audio
             "laser": "audio/sfx/laser_blaster_crisp",
@@ -76,6 +77,8 @@ class AssetsLoader:
             "shield_down": "audio/sfx/shield_depleted",
             "powerup": "audio/sfx/powerup_bonus_chime",
             "zap": "audio/sfx/alien_emp_zap",
+            "graze": "audio/sfx/laser_retro_pew_01",
+            "overdrive": "audio/sfx/powerup_bonus_chime",
         }
         
         # Sprint 10: load each TTF independently so titles, UI, and HUD have distinct roles.
@@ -413,6 +416,16 @@ class AssetsLoader:
             ]
             for cx, cy, cw, ch in craters:
                 pg.draw.ellipse(surf, (80, 60, 40) if "brown" in name else (90, 90, 90), (cx, cy, cw, ch))
+
+        elif name == "score_crystal":
+            # Procedural gemstone diamond: glowing cyan/electric-gold crystal with facet outlines
+            pts = [(w // 2, 2), (w - 2, h // 2), (w // 2, h - 2), (2, h // 2)]
+            pg.draw.polygon(surf, (0, 240, 255), pts)
+            inner_pts = [(w // 2, max(4, h // 5)), (w - max(4, w // 5), h // 2), (w // 2, h - max(4, h // 5)), (max(4, w // 5), h // 2)]
+            pg.draw.polygon(surf, (220, 255, 255), inner_pts)
+            pg.draw.polygon(surf, (0, 150, 220), pts, 2)
+            # Center glint
+            pg.draw.circle(surf, (255, 255, 255), (w // 2, h // 2), max(1, w // 8))
 
         else:
             # Fallback graphic: bright magenta box with crosses so it stands out as an error
