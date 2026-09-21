@@ -48,6 +48,24 @@ class RenderPipeline:
         self.chromatic_enabled = True
         self.letterbox_enabled = True
 
+        # Sprint 14 Phase 3: Screen Flash & Chromatic Pulses
+        self.flash_timer = 0.0
+        self.flash_duration = 0.0
+        self.flash_color = (255, 255, 255)
+        self.chromatic_pulse_timer = 0.0
+        self.chromatic_pulse_intensity = 0
+
+    def trigger_flash(self, duration=0.18, color=(255, 255, 255)):
+        """Triggers a brief screen flash (e.g. on EMP burst or critical boss phase transition)."""
+        self.flash_duration = max(0.01, duration)
+        self.flash_timer = duration
+        self.flash_color = color
+
+    def trigger_chromatic(self, duration=0.3, intensity=3):
+        """Triggers a momentary chromatic aberration pulse on heavy impact/overdrive."""
+        self.chromatic_pulse_timer = max(self.chromatic_pulse_timer, duration)
+        self.chromatic_pulse_intensity = max(self.chromatic_pulse_intensity, intensity)
+
     def _create_vignette(self, color):
         """Creates a smooth radial border gradient surface."""
         surf = pg.Surface((self.width, self.height), pg.SRCALPHA)
@@ -64,12 +82,19 @@ class RenderPipeline:
         self.letterbox_target = self.LETTERBOX_MAX if enabled else 0.0
 
     def update(self, dt):
-        """Updates animated post-effects like letterbox transitions."""
+        """Updates animated post-effects like letterbox transitions and screen flash."""
         if abs(self.letterbox_height - self.letterbox_target) > 0.1:
             diff = self.letterbox_target - self.letterbox_height
             self.letterbox_height += diff * min(1.0, 8.0 * dt)
         else:
             self.letterbox_height = self.letterbox_target
+
+        if self.flash_timer > 0:
+            self.flash_timer = max(0.0, self.flash_timer - dt)
+        if self.chromatic_pulse_timer > 0:
+            self.chromatic_pulse_timer = max(0.0, self.chromatic_pulse_timer - dt)
+            if self.chromatic_pulse_timer <= 0:
+                self.chromatic_pulse_intensity = 0
 
     def apply_bloom(self, source_surf):
         """Performs fast additive bloom by quarter-res downsampling and upscaling.
@@ -173,10 +198,12 @@ class RenderPipeline:
         else:
             transformed = self.world_canvas
 
-        # 2. Chromatic aberration during heavy shake only (boss alert additive brightness effect removed)
+        # 2. Chromatic aberration during heavy shake or pulse trigger
         chroma_intensity = 0
         if shake_mag > 8.0:
             chroma_intensity = 1
+        if self.chromatic_pulse_timer > 0:
+            chroma_intensity = max(chroma_intensity, self.chromatic_pulse_intensity)
 
         if chroma_intensity > 0:
             temp_surf = pg.Surface((self.width, self.height))
@@ -187,6 +214,14 @@ class RenderPipeline:
 
         # 3. Damage vignette (< 45% HP only — no shield vignette)
         self.draw_vignette(screen, health_ratio=health_ratio, shield_active=False)
+
+        # 3.5 Screen Flash overlay (EMP burst / critical hit)
+        if self.flash_timer > 0 and self.flash_duration > 0:
+            alpha = int(220 * (self.flash_timer / self.flash_duration))
+            if alpha > 0:
+                flash_surf = pg.Surface((self.width, self.height), pg.SRCALPHA)
+                flash_surf.fill((*self.flash_color[:3], alpha))
+                screen.blit(flash_surf, (0, 0))
 
         # 4. Letterbox on top of everything
         self.draw_letterbox(screen)

@@ -163,6 +163,19 @@ class AudioDirector:
         self.duck_timer = max(self.duck_timer, duration)
         self.duck_factor = factor
 
+    def trigger_overdrive_audio(self, duration=4.0):
+        """
+        Sprint 14 Phase 3: Dynamic Audio Ducking and Overdrive sound design.
+        Ducks background music and standard SFX, playing an electric overdrive surge.
+        """
+        self.trigger_ducking(duration=duration, factor=0.25)
+        self.play_sfx("overdrive", volume_mult=1.0)
+        self.play_sfx("zap", volume_mult=0.8)
+
+    def play_graze_sfx(self, pos_x=None):
+        """Plays soft graze audio feedback chime."""
+        return self.play_sfx("graze", pos_x=pos_x, volume_mult=0.6)
+
     def play_music(self, track_name, loop=True, fade_ms=500):
         """
         Manages background music playback with smooth transitions between tracks or procedural beds.
