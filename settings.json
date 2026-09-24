@@ -9,6 +9,21 @@
     "screen_flash": true,
     "hull": "vanguard",
     "color": "red",
+    "ordnance": "missile",
+    "credits": 2,
+    "unlocked_hulls": [
+        "interceptor"
+    ],
+    "unlocked_ordnance": [
+        "missile"
+    ],
+    "upgrades": {
+        "armor": 0,
+        "shield": 0,
+        "magnet": 0,
+        "graze": 0,
+        "ordnance_bay": 0
+    },
     "keybinds": {
         "up": "w",
         "down": "s",

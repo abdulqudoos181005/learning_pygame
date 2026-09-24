@@ -34,6 +34,11 @@ def _draw_ui_button(screen, rect, label, font, *, hovered=False, pressed=False,
     panel = pg.Surface((draw_rect.width, draw_rect.height), pg.SRCALPHA)
     panel.fill((0, 0, 0, 0))
 
+    if len(fill) == 3:
+        fill = (*fill, 255)
+    if len(border) == 3:
+        border = (*border, 255)
+
     if danger and (hovered or pressed):
         fill = (65, 15, 25, 240)
         border = (255, 60, 80, 255)

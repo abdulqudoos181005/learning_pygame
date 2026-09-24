@@ -47,9 +47,14 @@ class HUD:
         height = self.game.height
         assets = self.assets
 
-        # 1. SCORE DISPLAY
+        # 1. SCORE & NANITE CREDITS DISPLAY
         score_surf = assets.hud_font.render(f"SCORE: {play_state.score}", True, (255, 255, 255))
         surface.blit(score_surf, (25, 20))
+
+        # Sprint 15: In-mission salvaged credits
+        cr_earned = getattr(play_state, 'credits_earned', 0)
+        cr_surf = assets.hud_font.render(f"⚡ {cr_earned} CR", True, (255, 215, 0))
+        surface.blit(cr_surf, (score_surf.get_width() + 45, 20))
 
         # Sprint 7 & 11: COMBO DISPLAY WITH CYBER NUMERALS
         if play_state.combo_count > 1:
@@ -170,14 +175,17 @@ class HUD:
         for i in range(player.lives):
             surface.blit(life_img, (25 + i * 28, 72))
 
-        # 5. MISSILE CHARGE STATUS & PIPS
+        # 5. SECONDARY ORDNANCE STATUS & PIPS (Sprint 15)
         if player.missile_count > 0:
-            missile_icon = assets.get_image("missile", 12, 24)
+            ord_type = getattr(player, 'ordnance_type', 'missile')
+            icon_name = "cluster_missile" if ord_type == "cluster" else ("ion_emp_orb" if ord_type == "ion_emp" else "missile")
+            ord_label_prefix = "CLUSTER" if ord_type == "cluster" else ("ION EMP" if ord_type == "ion_emp" else "MISSILE")
+            missile_icon = assets.get_image(icon_name, 14, 24)
             for i in range(player.missile_count):
                 surface.blit(missile_icon, (25 + i * 18, 102))
             m_ready = player.missile_cooldown <= 0
             m_color = (0, 255, 200) if m_ready else (255, 140, 40)
-            status_text = "READY [M]" if m_ready else f"CHARGING {player.missile_cooldown:.1f}s"
+            status_text = f"{ord_label_prefix} [M]" if m_ready else f"CHARGING {player.missile_cooldown:.1f}s"
             m_lbl = assets.hud_font.render(status_text, True, m_color)
             surface.blit(m_lbl, (25 + player.missile_count * 18 + 6, 106))
 
