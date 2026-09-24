@@ -1437,24 +1437,139 @@ graph TD
 - `test_segmented_boss_hud_rendering` — Diamond phase dividers, damage trail, and shield overlay.
 - `test_aegis_defender_shield_and_overheat` — Frontal directional shield laser deflection and overheat cycle.
 - `test_sniper_skiff_railgun_aim_and_fire` — Railgun trajectory aiming and high-velocity slug discharge.
-- `test_phase_phantom_cloaking_and_ambush` — Cloak opacity, missile untargetability, and shotgun ambush.
-- `test_hive_carrier_and_swarmer_deployment` — Carrier mothership and homing micro-drone swarms.
-- `test_tactical_formations_and_level_configs` — Level 3–10 tactical formations and spawn queues.
-- `test_graze_detection_and_overdrive_charge` — Near-miss graze detection, scoring, and Overdrive charging.
-- `test_overdrive_meter_activation_and_duration` — Gauge filling, activation, 2x fire rate, and decay.
-- `test_emp_burst_and_score_crystal_conversion` — EMP bullet clearing and magnetic crystal collection.
-- `test_bullet_time_dilation_factor` — 50% enemy time dilation factor during Overdrive.
-- `test_render_pipeline_flash_and_chromatic_pulses` — Flash and chromatic aberration pulses.
-- `test_audio_director_overdrive_and_graze` — Audio ducking and sound design triggers.
-- `test_hud_overdrive_gauge_rendering` — HUD Overdrive gauge rendering in charging, ready, and active states.
 
-#### Project-Wide Test Suite (`tests/`) — ✅ 76/76 PASSED
-- All existing tests across Sprints 1–13 (UI, fonts, pipeline, databases, accounts, audio) continue to pass with 0 regressions.
+---
 
-#### Manual Verification
-- Play Level 5 to experience Goliath Dreadnought phase 1 -> 2 -> 3 transitions.
-- Play Level 10 to test Apex Void Leviathan Danmaku patterns and Supernova DPS check.
-- Test Graze mechanics by skimming past enemy laser streams and activate Overdrive with `F` key to trigger bullet time, EMP transmutations, and screen juice.
+## Sprint 15 — The Hangar Metagame, Tech Tree & Secondary Ordnance
+
+Sprint 15 transforms the Hangar from a cosmetic ship-selection bay into a full meta-progression hub featuring dual currency economies (Nanite Credits & Star Shards), an interactive 5-track Tech Tree, swappable Secondary Ordnance weapons (Cluster Bomb & Ion EMP), and real-time gameplay stat scaling.
+
+### 3-Phase Roadmap
+
+```mermaid
+graph TD
+    subgraph Phase 1: Economy & Persistence Engine
+        A1[Nanite Credits & Star Shards Currency] --> A2[SQLite Schema & Hangar Repository]
+        A2 --> A3[SaveSystem Bridge & Guest Session Fallback]
+    end
+
+    subgraph Phase 2: Hangar UI & Tech Tree Overhaul
+        B1[Dual Tab Navigation: Shipyard vs Armory Tech Tree] --> B2[5 Upgrade Tracks with Live Stat Previews]
+        B2 --> B3[Secondary Ordnance Weapon Selector]
+        B3 --> B4[Unlock Criteria for Hulls & Audio Polish]
+    end
+
+    subgraph Phase 3: Gameplay Hookups & Secondary Weapons
+        C1[Apply Upgrades to Player Stats & Magnet Field] --> C2[Cluster Bomb & Ion EMP Secondary Weapons]
+        C2 --> C3[Credit Earning Loop in PlayState & HUD]
+        C3 --> C4[Automated Verification & Unit Test Suite]
+    end
+
+    Phase 1 --> Phase 2
+    Phase 2 --> Phase 3
+```
+
+---
+
+### Phase 1: Economy & Persistent Storage Engine
+
+#### 1. Dual Currency Engine
+- **Nanite Credits (⚡):**
+  - Earned in combat: destroying regular enemies (+5 to +25), destroying elite craft (+50 to +100), collecting Score Crystals (+2 credits each), and completing waves/levels (+50 to +250).
+- **Star Shards (⭐):**
+  - Derived directly from 1, 2, and 3-star level clears across all 10 campaign sectors (up to 30 lifetime stars).
+  - Used alongside credits to unlock high-tier chassis and special ordnance.
+
+#### 2. SQLite Schema (`src/db/manager.py` & `src/db/hangar_repository.py`)
+- **`user_hangar` table:**
+  - `user_id INTEGER PRIMARY KEY`
+  - `credits INTEGER DEFAULT 0`
+  - `lifetime_credits INTEGER DEFAULT 0`
+  - `equipped_hull TEXT DEFAULT 'interceptor'`
+  - `equipped_color TEXT DEFAULT 'blue'`
+  - `equipped_ordnance TEXT DEFAULT 'missile'`
+  - `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`
+- **`user_upgrades` table:**
+  - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+  - `user_id INTEGER NOT NULL`
+  - `upgrade_id TEXT NOT NULL`
+  - `tier INTEGER DEFAULT 0`
+  - `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`
+  - `UNIQUE(user_id, upgrade_id)`
+- **`user_unlocked_hulls` table:**
+  - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+  - `user_id INTEGER NOT NULL`
+  - `hull_id TEXT NOT NULL`
+  - `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`
+  - `UNIQUE(user_id, hull_id)`
+
+#### 3. SaveSystem Bridge & Guest Persistence (`src/save_system.py`)
+- Full integration with `HangarRepository` for logged-in pilots.
+- Guest sessions persist credits, hull unlocks, and upgrade tiers in `hangar_data.json` / `settings.json`.
+
+---
+
+### Phase 2: Hangar UI & Tech Tree Overhaul (`src/states.py`)
+
+#### 1. Dual-Tab Interface in `HangarState`
+- **Tab 1: `[🚀 SHIP CHASSIS & LIVERY]`**:
+  - 3D-styled ship preview with animated thrusters, hull stats, and color swatches.
+  - Locked hull overlay with unlock requirements:
+    - *Strike Interceptor:* Unlocked by default (Free).
+    - *Heavy Assault Cruiser:* Requires 500 Credits OR 6 Campaign Stars.
+    - *Stealth Vanguard:* Requires 1200 Credits OR 15 Campaign Stars.
+- **Tab 2: `[⚡ ARMORY & TECH TREE]`**:
+  - Interactive grid displaying 5 upgrade modules, each with 5 upgrade tiers (pips):
+    1. **Nano-Alloy Armor:** `+15 Max HP` per tier (Cost: 100, 250, 450, 750, 1200).
+    2. **Shield Harmonizer:** `+15 Max Shield` & `+10% Faster Shield Reboot` per tier (Cost: 120, 280, 500, 800, 1300).
+    3. **Graviton Siphon Field:** `+40px Magnet Pull Range` for crystals & powerups per tier (Cost: 80, 200, 380, 650, 1000).
+    4. **Graze Flux Capacitor:** `+15% Overdrive & Graze bonus` per tier (Cost: 150, 320, 580, 900, 1500).
+    5. **Ordnance Bay Capacity:** `+1 Starting Missile stock` and `-10% missile cooldown` per tier (Cost: 140, 300, 550, 850, 1400).
+- **Tab 3 / Ordnance Selector: `[💣 SECONDARY ORDNANCE]`**:
+  - Choose between equipped secondary weapons fired via `[M]` or Gamepad `[B]`:
+    - **Homing Micro-Missiles (Default):** Agile high-speed tracking missiles (30 damage).
+    - **Cluster Bomb Pod (Unlock: 400 Credits):** Heavy rocket bursting into 6 explosive submunitions (15 dmg each).
+    - **Ion Pulse EMP (Unlock: 800 Credits):** Slow-moving energy orb that absorbs enemy laser fire and shocks passing targets.
+
+#### 2. Interactive Polish & Audio
+- Live stat difference previews on hover (`HP: 100 ➔ 115 (+15)` with glowing emerald delta).
+- Sound FX for purchase chimes, max-tier fanfare, and insufficient credit buzzes.
+
+---
+
+### Phase 3: Combat Integration & Secondary Ordnance (`src/sprites.py`, `src/states.py`)
+
+#### 1. Player Stat Injection
+- `Player` constructor dynamically injects health, shield, magnet radius, graze efficiency, and missile inventory from active pilot upgrades.
+- Magnet physics smoothly accelerates Score Crystals and PowerUps toward the ship when inside the graviton radius.
+
+#### 2. New Secondary Ordnance Projectiles
+- **`ClusterMissile` & `ClusterFragment`**:
+  - Seeks target, explodes on impact/proximity, releasing 6 high-velocity flaming fragments in a radial burst.
+- **`IonEMPOrb`**:
+  - Emits an expanding electric corona that dissolves enemy projectiles upon contact and deals tick damage to nearby enemies.
+
+#### 3. Real-Time Credit Harvest & HUD Display
+- HUD displays active run credits collected (`⚡ +XX`).
+- Level Complete screen displays base mission credits + star bonus multiplier + crystal salvage bonus.
+
+---
+
+### Verification Plan & Test Strategy
+
+#### Automated Unit & Integration Tests (`tests/test_sprint15_hangar_economy.py`)
+- `test_hangar_repository_credit_transactions` — Earning, spending, and persistence in SQLite.
+- `test_upgrade_tier_progression_and_caps` — Buying tiers 1–5 and validating maximum rank enforcement.
+- `test_hull_unlock_criteria_and_purchasing` — Unlocking Cruiser and Vanguard via credits or stars.
+- `test_player_stat_scaling_with_upgrades` — Validating Player HP, Shield, and Graze with upgraded stats.
+- `test_cluster_missile_submunition_detonation` — Cluster missile fragmentation on impact.
+- `test_ion_emp_orb_projectile_absorption` — Ion orb dissolving enemy lasers.
+- `test_graviton_magnet_suction_physics` — Crystal pull velocity within upgraded magnet radius.
+- `test_multi_user_hangar_progression_isolation` — Confirming user A upgrades and wallet do not affect user B.
+
+#### Project-Wide Test Suite
+- Run all 76+ test cases to verify 0 regressions across earlier sprints.
+
 
 
 

@@ -117,7 +117,46 @@ class DatabaseManager:
                 );
             """)
 
+            # 4. Hangar Wallet & Loadout Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_hangar (
+                    user_id INTEGER PRIMARY KEY,
+                    credits INTEGER DEFAULT 0,
+                    lifetime_credits INTEGER DEFAULT 0,
+                    equipped_hull TEXT DEFAULT 'interceptor',
+                    equipped_color TEXT DEFAULT 'blue',
+                    equipped_ordnance TEXT DEFAULT 'missile',
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+            """)
+
+            # 5. User Upgrades Tech Tree Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_upgrades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    upgrade_id TEXT NOT NULL,
+                    tier INTEGER DEFAULT 0,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    UNIQUE(user_id, upgrade_id)
+                );
+            """)
+
+            # 6. User Unlocked Hulls Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_unlocked_hulls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    hull_id TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    UNIQUE(user_id, hull_id)
+                );
+            """)
+
             # Indices for fast queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_scores_score ON scores(score DESC);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_scores_user ON scores(user_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_lvl ON campaign_progress(user_id, level);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_upgrades_user ON user_upgrades(user_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_unlocked_hulls_user ON user_unlocked_hulls(user_id);")
+
