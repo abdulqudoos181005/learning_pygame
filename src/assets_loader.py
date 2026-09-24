@@ -427,6 +427,26 @@ class AssetsLoader:
             # Center glint
             pg.draw.circle(surf, (255, 255, 255), (w // 2, h // 2), max(1, w // 8))
 
+        elif name == "cluster_missile":
+            # Heavy warhead with twin side-pods and emerald/amber fins
+            pg.draw.rect(surf, (255, 120, 30), (w // 2 - 4, h // 4, 8, h // 2))
+            pg.draw.polygon(surf, (255, 220, 50), [(w // 2, 0), (w // 2 - 5, h // 4), (w // 2 + 5, h // 4)])
+            pg.draw.polygon(surf, (220, 70, 0), [(w // 2 - 4, h // 2), (w // 2 - 10, h * 3 // 4), (w // 2 - 4, h * 3 // 4)])
+            pg.draw.polygon(surf, (220, 70, 0), [(w // 2 + 4, h // 2), (w // 2 + 10, h * 3 // 4), (w // 2 + 4, h * 3 // 4)])
+            pg.draw.circle(surf, (255, 255, 120), (w // 2, h * 3 // 4 + 2), 3)
+
+        elif name == "cluster_fragment":
+            # Small fiery fragment
+            pg.draw.circle(surf, (255, 200, 40), (w // 2, h // 2), w // 2 - 1)
+            pg.draw.circle(surf, (255, 80, 20), (w // 2, h // 2), w // 2 - 3)
+            pg.draw.circle(surf, (255, 255, 255), (w // 2, h // 2), max(1, w // 4))
+
+        elif name == "ion_emp_orb":
+            # Glowing cyan energy orb with electric rings
+            pg.draw.circle(surf, (0, 200, 255, 100), (w // 2, h // 2), w // 2 - 2)
+            pg.draw.circle(surf, (120, 240, 255), (w // 2, h // 2), w // 2 - 4, 2)
+            pg.draw.circle(surf, (255, 255, 255), (w // 2, h // 2), max(2, w // 5))
+
         else:
             # Fallback graphic: bright magenta box with crosses so it stands out as an error
             pg.draw.rect(surf, (255, 0, 255), (0, 0, w, h), 2)

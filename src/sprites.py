@@ -79,6 +79,32 @@ class Player(pg.sprite.Sprite):
         self.speed_boost_timer = 0.0
         self.shield_active = False
         self.laser_power_timer = 0.0   # Power laser: next-tier boost for 10s
+
+        # Sprint 15: Tech Tree Upgrades & Secondary Ordnance Loadout
+        self.ordnance_type = loadout.get("ordnance", "missile").lower()
+        upgrades = {}
+        if hasattr(self.game, 'save_system') and self.game.save_system:
+            curr_user = getattr(self.game, 'current_user', None)
+            user_id = curr_user["id"] if curr_user and isinstance(curr_user, dict) and "id" in curr_user else None
+            hangar_data = self.game.save_system.load_hangar(user_id)
+            upgrades = hangar_data.get("upgrades", {})
+        elif hasattr(self.game, 'upgrades'):
+            upgrades = getattr(self.game, 'upgrades', {})
+
+        armor_tier = upgrades.get("armor", 0)
+        shield_tier = upgrades.get("shield", 0)
+        magnet_tier = upgrades.get("magnet", 0)
+        graze_tier = upgrades.get("graze", 0)
+        ordnance_tier = upgrades.get("ordnance_bay", 0)
+
+        self.max_health += armor_tier * 15
+        self.health = self.max_health
+        self.max_shield += shield_tier * 15
+        self.shield_reboot_bonus = 1.0 + shield_tier * 0.1
+        self.magnet_radius = 80.0 + magnet_tier * 45.0
+        self.starting_missiles += ordnance_tier
+        self.missile_cooldown_base = max(0.2, 0.5 - ordnance_tier * 0.05)
+
         self.missile_count = self.starting_missiles  # Stored homing missiles (activated by M key)
         self.missile_cooldown = 0.0    # Prevent spamming missiles
 
@@ -88,7 +114,9 @@ class Player(pg.sprite.Sprite):
         self.overdrive_active = False
         self.overdrive_timer = 0.0
         self.OVERDRIVE_DURATION = 4.0
-        self.graze_radius = 42
+        self.graze_radius = 42 + graze_tier * 6
+        self.graze_score_bonus = 50 + graze_tier * 15
+        self.graze_charge_amount = 12.0 + graze_tier * 2.5
         self.graze_count = 0
 
     def add_overdrive(self, amount):
@@ -339,7 +367,7 @@ class Player(pg.sprite.Sprite):
         self.presentation.draw_front(surface)
 
     def _launch_missile(self):
-        """Spawns a homing Missile targeting the highest-health enemy on screen."""
+        """Spawns equipped Secondary Ordnance (Missile, Cluster Bomb, or Ion EMP)."""
         state = self.game.state
         if not hasattr(state, 'enemies') or not hasattr(state, 'missiles'):
             return
@@ -349,9 +377,16 @@ class Player(pg.sprite.Sprite):
             self.game.audio.play_sfx("laser_pew", pos_x=self.pos_x)
         elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
             self.game.assets.get_sound("laser_pew").play()
-        missile = Missile(self.game, self.rect.centerx, self.rect.top, state.enemies)
-        state.missiles.add(missile)
-        state.all_sprites.add(missile)
+
+        if self.ordnance_type == "cluster":
+            ordnance = ClusterMissile(self.game, self.rect.centerx, self.rect.top, state.enemies)
+        elif self.ordnance_type == "ion_emp":
+            ordnance = IonEMPOrb(self.game, self.rect.centerx, self.rect.top, state.enemies)
+        else:
+            ordnance = Missile(self.game, self.rect.centerx, self.rect.top, state.enemies)
+
+        state.missiles.add(ordnance)
+        state.all_sprites.add(ordnance)
 
 
 class Laser(pg.sprite.Sprite):
@@ -742,6 +777,177 @@ class Missile(pg.sprite.Sprite):
             surface.blit(glow, glow.get_rect(center=(round(self.trail[index - 1][0]), round(self.trail[index - 1][1]))), special_flags=pg.BLEND_ADD)
 
 
+class ClusterMissile(pg.sprite.Sprite):
+    """
+    Sprint 15 Secondary Ordnance: Cluster Bomb Pod.
+    Seeks enemies, deals direct damage and bursts into 6 explosive submunition fragments.
+    """
+    SPEED = 420.0
+    TURN_RATE = 3.0
+    DAMAGE = 25
+
+    def __init__(self, game, x, y, enemy_group):
+        super().__init__()
+        self.game = game
+        self.enemy_group = enemy_group
+        self.damage = self.DAMAGE
+        self.image = self.game.assets.get_image("cluster_missile", 18, 32)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.angle_rad = 0.0
+        self.fx = float(x)
+        self.fy = float(y)
+        self.trail = []
+        self.lifetime = 3.0
+
+    def _find_target(self):
+        best = None
+        best_hp = -1
+        for e in self.enemy_group:
+            if getattr(e, "is_cloaked", False):
+                continue
+            if e.health > best_hp:
+                best_hp = e.health
+                best = e
+        return best
+
+    def detonate(self):
+        """Detonates warhead, spawning 6 radial cluster fragments and exploding."""
+        state = getattr(self.game, 'state', None)
+        if state and hasattr(state, 'missiles'):
+            for i in range(6):
+                ang = i * 60 + random.uniform(-10, 10)
+                frag = ClusterFragment(self.game, self.rect.centerx, self.rect.centery, ang)
+                state.missiles.add(frag)
+                state.all_sprites.add(frag)
+        self.kill()
+
+    def update(self, dt):
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.detonate()
+            return
+
+        self.trail.append((self.fx, self.fy))
+        if len(self.trail) > 12:
+            self.trail.pop(0)
+
+        target = self._find_target()
+        if target:
+            dx = target.rect.centerx - self.fx
+            dy = target.rect.centery - self.fy
+            desired_angle = math.atan2(dy, dx) + math.pi / 2
+            diff = (desired_angle - self.angle_rad + math.pi) % (2 * math.pi) - math.pi
+            max_turn = self.TURN_RATE * dt
+            self.angle_rad += max(-max_turn, min(max_turn, diff))
+
+        self.fx += math.sin(self.angle_rad) * self.SPEED * dt
+        self.fy -= math.cos(self.angle_rad) * self.SPEED * dt
+        self.rect.center = (int(self.fx), int(self.fy))
+
+        degrees = math.degrees(self.angle_rad)
+        base_img = self.game.assets.get_image("cluster_missile", 18, 32)
+        self.image = pg.transform.rotate(base_img, -degrees)
+        self.rect = self.image.get_rect(center=self.rect.center)
+
+        if (self.rect.bottom < 0 or self.rect.top > self.game.height
+                or self.rect.right < 0 or self.rect.left > self.game.width):
+            self.kill()
+
+    def draw_trail(self, surface):
+        if len(self.trail) < 2:
+            return
+        for index in range(1, len(self.trail)):
+            alpha = int(30 + index * 15)
+            radius = max(2, int(index / 4))
+            glow = pg.Surface((radius * 6, radius * 6), pg.SRCALPHA)
+            pg.draw.circle(glow, (255, 100, 20, alpha), glow.get_rect().center, radius)
+            surface.blit(glow, glow.get_rect(center=(round(self.trail[index - 1][0]), round(self.trail[index - 1][1]))), special_flags=pg.BLEND_ADD)
+
+
+class ClusterFragment(pg.sprite.Sprite):
+    """Explosive submunition fragment ejected from ClusterMissile."""
+    SPEED = 480.0
+    DAMAGE = 15
+
+    def __init__(self, game, x, y, angle_deg):
+        super().__init__()
+        self.game = game
+        self.damage = self.DAMAGE
+        self.angle_deg = angle_deg
+        self.rad = math.radians(angle_deg)
+        self.image = self.game.assets.get_image("cluster_fragment", 12, 12)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.fx = float(x)
+        self.fy = float(y)
+        self.speed_x = math.cos(self.rad) * self.SPEED
+        self.speed_y = math.sin(self.rad) * self.SPEED
+        self.lifetime = 0.7
+
+    def update(self, dt):
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.kill()
+            return
+        self.fx += self.speed_x * dt
+        self.fy += self.speed_y * dt
+        self.rect.center = (int(self.fx), int(self.fy))
+        if (self.rect.bottom < 0 or self.rect.top > self.game.height
+                or self.rect.right < 0 or self.rect.left > self.game.width):
+            self.kill()
+
+    def draw_trail(self, surface):
+        pass
+
+
+class IonEMPOrb(pg.sprite.Sprite):
+    """
+    Sprint 15 Secondary Ordnance: Ion Pulse EMP.
+    Slow-moving piercing energy sphere that absorbs enemy lasers and shocks targets.
+    """
+    SPEED_Y = -220.0
+    DAMAGE = 12
+
+    def __init__(self, game, x, y, enemy_group=None):
+        super().__init__()
+        self.game = game
+        self.damage = self.DAMAGE
+        self.image = self.game.assets.get_image("ion_emp_orb", 36, 36)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.fx = float(x)
+        self.fy = float(y)
+        self.lifetime = 3.5
+        self.aura_radius = 48
+
+    def update(self, dt):
+        self.lifetime -= dt
+        if self.lifetime <= 0 or self.rect.bottom < 0:
+            self.kill()
+            return
+
+        self.fy += self.SPEED_Y * dt
+        self.rect.center = (int(self.fx), int(self.fy))
+
+        # Dissolve nearby enemy lasers
+        state = getattr(self.game, 'state', None)
+        if state and hasattr(state, 'enemy_lasers'):
+            for laser in list(state.enemy_lasers):
+                dx = laser.rect.centerx - self.rect.centerx
+                dy = laser.rect.centery - self.rect.centery
+                if dx * dx + dy * dy <= self.aura_radius * self.aura_radius:
+                    laser.kill()
+                    if hasattr(state, 'particles'):
+                        from fx import spawn_sparks
+                        spawn_sparks(state.particles, laser.rect.centerx, laser.rect.centery, (0, 0), color=(0, 240, 255), count=4)
+
+    def draw_trail(self, surface):
+        pulse = 1.0 + 0.2 * math.sin(pg.time.get_ticks() * 0.015)
+        r = int(self.aura_radius * pulse)
+        aura = pg.Surface((r * 2, r * 2), pg.SRCALPHA)
+        pg.draw.circle(aura, (0, 220, 255, 60), (r, r), r)
+        pg.draw.circle(aura, (180, 255, 255, 120), (r, r), max(1, r - 6), 2)
+        surface.blit(aura, aura.get_rect(center=self.rect.center), special_flags=pg.BLEND_ADD)
+
+
 class PowerUp(pg.sprite.Sprite):
     """
     Floating power-up drop from destroyed enemies.
@@ -763,7 +969,19 @@ class PowerUp(pg.sprite.Sprite):
         self.speed_y = 120.0
 
     def update(self, dt):
-        self.rect.y += self.speed_y * dt
+        state = getattr(self.game, 'state', None)
+        player = getattr(state, 'player', None)
+        if player and hasattr(player, 'rect') and hasattr(player, 'magnet_radius') and player.magnet_radius > 0:
+            dx = player.rect.centerx - self.rect.centerx
+            dy = player.rect.centery - self.rect.centery
+            dist = math.hypot(dx, dy)
+            if dist < player.magnet_radius and dist > 1.0:
+                self.rect.x += int((dx / dist) * 160.0 * dt)
+                self.rect.y += int((dy / dist) * 160.0 * dt)
+            else:
+                self.rect.y += self.speed_y * dt
+        else:
+            self.rect.y += self.speed_y * dt
         # Clean up if it falls off bottom screen
         if self.rect.top > self.game.height:
             self.kill()

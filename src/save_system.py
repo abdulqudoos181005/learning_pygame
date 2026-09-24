@@ -115,23 +115,153 @@ class SaveSystem:
             print(f"Warning: Failed to save settings JSON: {e}")
             return False
 
-    def load_loadout(self):
-        """Loads ship loadout configuration (hull, color) from settings.json."""
+    def load_loadout(self, user_id=None):
+        """Loads ship loadout configuration (hull, color, ordnance) from DB or settings.json."""
+        if user_id is not None and self.hangar_repo:
+            try:
+                hangar_data = self.hangar_repo.get_hangar_data(user_id)
+                if hangar_data:
+                    return {
+                        "hull": hangar_data.get("equipped_hull", "interceptor"),
+                        "color": hangar_data.get("equipped_color", "blue"),
+                        "ordnance": hangar_data.get("equipped_ordnance", "missile"),
+                    }
+            except Exception as e:
+                print(f"[SaveSystem] Warning loading loadout from database: {e}")
+
         settings = self.load_settings()
         hull = str(settings.get("hull", "interceptor")).lower()
         color = str(settings.get("color", "blue")).lower()
+        ordnance = str(settings.get("ordnance", "missile")).lower()
         if hull not in ("interceptor", "cruiser", "vanguard"):
             hull = "interceptor"
         if color not in ("blue", "green", "orange", "red"):
             color = "blue"
-        return {"hull": hull, "color": color}
+        if ordnance not in ("missile", "cluster", "ion_emp"):
+            ordnance = "missile"
+        return {"hull": hull, "color": color, "ordnance": ordnance}
 
-    def save_loadout(self, hull, color):
-        """Saves chosen ship hull and color to settings.json."""
+    def save_loadout(self, hull, color, ordnance="missile", user_id=None):
+        """Saves chosen ship hull, color, and ordnance to database and settings.json."""
+        clean_hull = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
+        clean_color = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
+        clean_ordnance = str(ordnance).lower() if str(ordnance).lower() in ("missile", "cluster", "ion_emp") else "missile"
+
+        if user_id is not None and self.hangar_repo:
+            try:
+                self.hangar_repo.set_loadout(user_id, clean_hull, clean_color, clean_ordnance)
+            except Exception as e:
+                print(f"[SaveSystem] Warning saving loadout to database: {e}")
+
         settings = self.load_settings()
-        settings["hull"] = str(hull).lower() if str(hull).lower() in ("interceptor", "cruiser", "vanguard") else "interceptor"
-        settings["color"] = str(color).lower() if str(color).lower() in ("blue", "green", "orange", "red") else "blue"
+        settings["hull"] = clean_hull
+        settings["color"] = clean_color
+        settings["ordnance"] = clean_ordnance
         return self.save_settings(settings)
+
+    def load_hangar(self, user_id=None):
+        """Loads complete hangar data (wallet, upgrades, hull unlocks, equipped loadout)."""
+        if user_id is not None and self.hangar_repo:
+            try:
+                return self.hangar_repo.get_hangar_data(user_id)
+            except Exception as e:
+                print(f"[SaveSystem] Warning loading hangar from database: {e}")
+
+        # JSON Guest fallback
+        settings = self.load_settings()
+        upgrades = settings.get("upgrades", {
+            "armor": 0,
+            "shield": 0,
+            "magnet": 0,
+            "graze": 0,
+            "ordnance_bay": 0,
+        })
+        return {
+            "credits": settings.get("credits", 0),
+            "lifetime_credits": settings.get("credits", 0),
+            "equipped_hull": settings.get("hull", "interceptor"),
+            "equipped_color": settings.get("color", "blue"),
+            "equipped_ordnance": settings.get("ordnance", "missile"),
+            "upgrades": upgrades,
+            "unlocked_hulls": settings.get("unlocked_hulls", ["interceptor"]),
+            "unlocked_ordnance": settings.get("unlocked_ordnance", ["missile"]),
+        }
+
+    def add_credits(self, amount, user_id=None):
+        """Adds credits to active profile."""
+        if amount <= 0:
+            return 0
+        if user_id is not None and self.hangar_repo:
+            try:
+                return self.hangar_repo.add_credits(user_id, amount)
+            except Exception as e:
+                print(f"[SaveSystem] Warning adding credits to DB: {e}")
+
+        settings = self.load_settings()
+        current = settings.get("credits", 0)
+        new_total = current + amount
+        settings["credits"] = new_total
+        self.save_settings(settings)
+        return new_total
+
+    def purchase_upgrade(self, upgrade_id, user_id=None):
+        """Buys next tier of upgrade for user or guest."""
+        from db.hangar_repository import HangarRepository
+        if user_id is not None and self.hangar_repo:
+            return self.hangar_repo.purchase_upgrade(user_id, upgrade_id)
+
+        # Guest mode JSON purchase
+        settings = self.load_settings()
+        upgrades = settings.get("upgrades", {
+            "armor": 0, "shield": 0, "magnet": 0, "graze": 0, "ordnance_bay": 0
+        })
+        current_tier = upgrades.get(upgrade_id, 0)
+        costs = HangarRepository.UPGRADE_COSTS.get(upgrade_id, [100, 200, 300, 400, 500])
+        if current_tier >= len(costs):
+            return {"success": False, "error": "Max tier reached."}
+
+        cost = costs[current_tier]
+        credits = settings.get("credits", 0)
+        if credits < cost:
+            return {"success": False, "error": f"Insufficient credits ({credits}/{cost})."}
+
+        settings["credits"] = credits - cost
+        upgrades[upgrade_id] = current_tier + 1
+        settings["upgrades"] = upgrades
+        self.save_settings(settings)
+        return {
+            "success": True,
+            "new_tier": current_tier + 1,
+            "credits_left": settings["credits"],
+            "cost": cost,
+        }
+
+    def unlock_hull(self, hull_id, total_stars=0, user_id=None):
+        """Unlocks a hull via DB or JSON."""
+        from db.hangar_repository import HangarRepository
+        if user_id is not None and self.hangar_repo:
+            return self.hangar_repo.unlock_hull(user_id, hull_id, total_stars)
+
+        settings = self.load_settings()
+        unlocked = set(settings.get("unlocked_hulls", ["interceptor"]))
+        if hull_id in unlocked:
+            return {"success": True, "already_unlocked": True}
+
+        req = HangarRepository.HULL_REQUIREMENTS.get(hull_id, {"cost": 500, "stars": 0})
+        cost = req["cost"]
+        required_stars = req["stars"]
+
+        can_unlock = (total_stars >= required_stars and required_stars > 0)
+        if not can_unlock and cost > 0:
+            credits = settings.get("credits", 0)
+            if credits < cost:
+                return {"success": False, "error": f"Requires {cost} credits or {required_stars} stars."}
+            settings["credits"] = credits - cost
+
+        unlocked.add(hull_id)
+        settings["unlocked_hulls"] = list(unlocked)
+        self.save_settings(settings)
+        return {"success": True, "hull_id": hull_id}
         
     def load_scores(self, user_id=None):
         """

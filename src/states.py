@@ -811,19 +811,19 @@ class OptionsState(State):
 
 
 # ---------------------------------------------------------------------------
-# Sprint 11 / Pillar E — HangarState (Living Shipyard & Loadout Identity)
+# Sprint 11 & Sprint 15 — HangarState (Shipyard, Tech Tree & Secondary Ordnance)
 # ---------------------------------------------------------------------------
 class HangarState(State):
     """
-    Sprint 11 / Pillar E — Hangar Identity (The Missing Metagame Fantasy).
+    Sprint 11 & 15 — The Hangar Metagame Hub.
 
-    Provides an interactive shipyard bay to select and customize ships:
-    - 3 Hull Classes: Interceptor (Balanced), Heavy Cruiser (Assault/Tank), Stealth Vanguard (Agile/Missile).
-    - 4 Color Swatches: Blue, Green, Orange, Red.
-    - Live ship preview: idle animated thruster plumes, gentle yaw banking, sparkle bursts, nameplate in Audiowide.
-    - Modular shipyard greeble backdrop.
-    - Saves selection to settings.json and synchronizes with Game and PlayState.
+    Provides a comprehensive 3-Tab command center:
+    - Tab 0: [SHIP CHASSIS & LIVERY] — 3 Hulls, 4 Paint Swatches, 3D animated ship preview & unlock purchases.
+    - Tab 1: [ARMORY TECH TREE] — 5-track persistent upgrade tree with 5 tiers each, stat deltas & purchase chimes.
+    - Tab 2: [SECONDARY ORDNANCE] — Select & unlock Homing Missiles, Cluster Bomb Pod, and Ion Pulse EMP.
     """
+
+    TABS = ["🚀 SHIP CHASSIS", "⚡ TECH TREE", "💣 ORDNANCE"]
 
     HULLS = [
         {
@@ -835,6 +835,8 @@ class HangarState(State):
             "shield": "100 SH",
             "cooldown": "0.25s",
             "missiles": "3 Starting",
+            "cost": 0,
+            "stars": 0,
             "trait": "Agile turn radius, balanced fire rate & hull endurance.",
             "color_accent": (0, 220, 255),
         },
@@ -847,18 +849,22 @@ class HangarState(State):
             "shield": "120 SH",
             "cooldown": "0.28s",
             "missiles": "3 Starting",
+            "cost": 500,
+            "stars": 6,
             "trait": "Dual-barrel wide volley, massive hull plating & shield pool.",
             "color_accent": (255, 140, 40),
         },
         {
             "id": "vanguard",
             "name": "STEALTH VANGUARD",
-            "role": "High-Speed Interceptor / Bomber",
+            "role": "High-Speed Bomber",
             "speed": "460 PX/S",
             "hp": "80 HP",
             "shield": "80 SH",
             "cooldown": "0.22s",
             "missiles": "4 Starting",
+            "cost": 1200,
+            "stars": 15,
             "trait": "Hyper-velocity thrusters, rapid laser cycle, +1 bonus missile.",
             "color_accent": (160, 255, 120),
         },
@@ -871,26 +877,121 @@ class HangarState(State):
         {"id": "red",    "name": "Crimson Red",   "swatch": (255, 60, 80)},
     ]
 
+    UPGRADE_CATALOG = [
+        {
+            "id": "armor",
+            "name": "NANO-ALLOY ARMOR",
+            "icon": "🛡️",
+            "desc": "Reinforces bulkheads with reactive carbon nano-mesh (+15 HP/tier).",
+            "stat_label": "MAX HULL",
+            "base_val": 100,
+            "bonus_per_tier": 15,
+            "unit": "HP",
+            "color": (255, 120, 120),
+            "costs": [100, 250, 450, 750, 1200],
+        },
+        {
+            "id": "shield",
+            "name": "SHIELD HARMONIZER",
+            "icon": "⚡",
+            "desc": "Calibrates deflector matrix (+15 Shield & +10% Reboot Speed/tier).",
+            "stat_label": "MAX SHIELD",
+            "base_val": 100,
+            "bonus_per_tier": 15,
+            "unit": "SH",
+            "color": (0, 220, 255),
+            "costs": [120, 280, 500, 800, 1300],
+        },
+        {
+            "id": "magnet",
+            "name": "GRAVITON SIPHON FIELD",
+            "icon": "🧲",
+            "desc": "Generates a micro-singularity pulling crystals & powerups (+45px/tier).",
+            "stat_label": "MAGNET RADIUS",
+            "base_val": 80,
+            "bonus_per_tier": 45,
+            "unit": "PX",
+            "color": (160, 255, 120),
+            "costs": [80, 200, 380, 650, 1000],
+        },
+        {
+            "id": "graze",
+            "name": "GRAZE FLUX CAPACITOR",
+            "icon": "✨",
+            "desc": "Siphons near-miss laser energy into Overdrive & score (+15%/tier).",
+            "stat_label": "GRAZE GAIN",
+            "base_val": 100,
+            "bonus_per_tier": 15,
+            "unit": "% CHARGE",
+            "color": (255, 220, 60),
+            "costs": [150, 320, 580, 900, 1500],
+        },
+        {
+            "id": "ordnance_bay",
+            "name": "ORDNANCE MAGAZINE",
+            "icon": "🚀",
+            "desc": "Expands rocket magazine (+1 Missile Stock, -10% Cooldown/tier).",
+            "stat_label": "MISSILE STOCK",
+            "base_val": 3,
+            "bonus_per_tier": 1,
+            "unit": "MISSILES",
+            "color": (255, 150, 40),
+            "costs": [140, 300, 550, 850, 1400],
+        },
+    ]
+
+    ORDNANCE_CATALOG = [
+        {
+            "id": "missile",
+            "name": "HOMING MISSILES",
+            "cost": 0,
+            "stars": 0,
+            "damage": "30 DMG",
+            "cadence": "0.5s CD",
+            "desc": "Agile radar-guided rockets that seek out highest-durability enemy threats.",
+            "color": (255, 160, 50),
+        },
+        {
+            "id": "cluster",
+            "name": "CLUSTER BOMB POD",
+            "cost": 400,
+            "stars": 4,
+            "damage": "25 + 6x15 DMG",
+            "cadence": "0.6s CD",
+            "desc": "Heavy warhead that detonates on impact into 6 high-velocity radial fragments.",
+            "color": (255, 90, 40),
+        },
+        {
+            "id": "ion_emp",
+            "name": "ION PULSE EMP",
+            "cost": 800,
+            "stars": 8,
+            "damage": "12 DMG/TICK",
+            "cadence": "0.8s CD",
+            "desc": "Slow-moving energy orb that absorbs enemy laser fire and shocks hostiles.",
+            "color": (0, 240, 255),
+        },
+    ]
+
     def __init__(self, game, return_state="level_select"):
         super().__init__(game)
         self.return_state = return_state
         self.starfield = Starfield(self.game.width, self.game.height, num_stars=70)
         self.anim_timer = 0.0
+        self.active_tab = 0  # 0: Chassis, 1: Tech Tree, 2: Ordnance
 
-        # Load active loadout
-        current = getattr(self.game, 'loadout', {"hull": "interceptor", "color": "blue"})
-        curr_hull = current.get("hull", "interceptor")
-        curr_color = current.get("color", "blue")
+        # Load profile wallet & hangar state
+        self._refresh_hangar_data()
 
         self.selected_hull_idx = 0
         for i, h in enumerate(self.HULLS):
-            if h["id"] == curr_hull:
+            if h["id"] == self.hangar_data.get("equipped_hull", "interceptor"):
                 self.selected_hull_idx = i
                 break
 
         self.selected_color_idx = 0
         for i, c in enumerate(self.COLORS):
-            if c["id"] == curr_color:
+            if c["id"] == self.hangar_data.get("equipped_color", "blue"):
                 self.selected_color_idx = i
                 break
 
@@ -913,42 +1014,99 @@ class HangarState(State):
             {"name": "cannons_turrets/turret_dual_mount_02", "x": 1060, "y": 520, "w": 36, "h": 36, "alpha": 45},
         ]
 
-        # Geometry & Interactive Buttons
-        self.back_rect = pg.Rect(40, 40, 110, 46)
+        # Geometry & Interactive Navigation
+        self.back_rect = pg.Rect(40, 35, 110, 44)
         self.back_hovered = False
-        self.deploy_rect = pg.Rect(self.game.width - 200, 40, 160, 46)
+        self.deploy_rect = pg.Rect(self.game.width - 190, 35, 150, 44)
         self.deploy_hovered = False
 
-        # Hull selection tabs (Top middle)
-        self.hull_rects = []
-        tab_w = 260
-        tab_gap = 20
-        total_tab_w = len(self.HULLS) * tab_w + (len(self.HULLS) - 1) * tab_gap
-        start_tab_x = (self.game.width - total_tab_w) // 2
-        for i in range(len(self.HULLS)):
-            self.hull_rects.append(pg.Rect(start_tab_x + i * (tab_w + tab_gap), 115, tab_w, 48))
+        # Top Navigation Tabs
+        self.tab_rects = []
+        tab_w = 210
+        tab_gap = 14
+        start_tab_x = self.game.width // 2 - ((len(self.TABS) * tab_w + (len(self.TABS) - 1) * tab_gap) // 2)
+        for i in range(len(self.TABS)):
+            self.tab_rects.append(pg.Rect(start_tab_x + i * (tab_w + tab_gap), 35, tab_w, 44))
 
-        # Color swatches (Bottom center under live preview)
+        # Hull selection tabs (Tab 0)
+        self.hull_rects = []
+        h_tab_w = 260
+        h_tab_gap = 20
+        total_h_tab_w = len(self.HULLS) * h_tab_w + (len(self.HULLS) - 1) * h_tab_gap
+        start_h_x = (self.game.width - total_h_tab_w) // 2
+        for i in range(len(self.HULLS)):
+            self.hull_rects.append(pg.Rect(start_h_x + i * (h_tab_w + h_tab_gap), 95, h_tab_w, 44))
+
+        # Color swatches (Tab 0)
         self.swatch_rects = []
-        swatch_w, swatch_h = 72, 42
-        swatch_gap = 18
+        swatch_w, swatch_h = 68, 38
+        swatch_gap = 16
         total_swatch_w = len(self.COLORS) * swatch_w + (len(self.COLORS) - 1) * swatch_gap
         start_swatch_x = (self.game.width - total_swatch_w) // 2
         for i in range(len(self.COLORS)):
-            self.swatch_rects.append(pg.Rect(start_swatch_x + i * (swatch_w + swatch_gap), 440, swatch_w, swatch_h))
+            self.swatch_rects.append(pg.Rect(start_swatch_x + i * (swatch_w + swatch_gap), 425, swatch_w, swatch_h))
 
-        # Carousel arrow buttons
-        self.prev_hull_rect = pg.Rect(self.game.width // 2 - 240, 275, 48, 64)
-        self.next_hull_rect = pg.Rect(self.game.width // 2 + 192, 275, 48, 64)
+        # Carousel arrow buttons (Tab 0)
+        self.prev_hull_rect = pg.Rect(self.game.width // 2 - 240, 260, 48, 64)
+        self.next_hull_rect = pg.Rect(self.game.width // 2 + 192, 260, 48, 64)
         self.prev_hovered = False
         self.next_hovered = False
+
+        # Hull Unlock Button (Tab 0)
+        self.hull_unlock_rect = pg.Rect(self.game.width // 2 - 140, 475, 280, 44)
+
+        # Tech Tree Upgrade Rows (Tab 1)
+        self.upgrade_buy_rects = []
+        for i in range(len(self.UPGRADE_CATALOG)):
+            self.upgrade_buy_rects.append(pg.Rect(self.game.width - 290, 110 + i * 110, 210, 42))
+
+        # Ordnance Cards (Tab 2)
+        self.ordnance_card_rects = []
+        self.ordnance_equip_rects = []
+        card_w, card_h = 360, 440
+        card_gap = 30
+        total_card_w = len(self.ORDNANCE_CATALOG) * card_w + (len(self.ORDNANCE_CATALOG) - 1) * card_gap
+        start_c_x = (self.game.width - total_card_w) // 2
+        for i in range(len(self.ORDNANCE_CATALOG)):
+            cx = start_c_x + i * (card_w + card_gap)
+            self.ordnance_card_rects.append(pg.Rect(cx, 130, card_w, card_h))
+            self.ordnance_equip_rects.append(pg.Rect(cx + 30, 130 + card_h - 70, card_w - 60, 46))
+
+        # Status feedback banner
+        self.status_message = ""
+        self.status_color = (0, 240, 255)
+        self.status_timer = 0.0
+
+    def _get_user_id(self):
+        curr_user = getattr(self.game, 'current_user', None)
+        return curr_user["id"] if curr_user and isinstance(curr_user, dict) and "id" in curr_user else None
+
+    def _refresh_hangar_data(self):
+        user_id = self._get_user_id()
+        if hasattr(self.game, 'save_system') and self.game.save_system:
+            self.hangar_data = self.game.save_system.load_hangar(user_id)
+            progress = self.game.save_system.load_progress(user_id)
+            self.total_stars = sum(progress.get("level_stars", {}).values())
+        else:
+            self.hangar_data = {
+                "credits": 0, "equipped_hull": "interceptor", "equipped_color": "blue",
+                "equipped_ordnance": "missile", "upgrades": {}, "unlocked_hulls": ["interceptor"],
+                "unlocked_ordnance": ["missile"]
+            }
+            self.total_stars = 0
 
     def _save_and_sync(self):
         hull_id = self.HULLS[self.selected_hull_idx]["id"]
         color_id = self.COLORS[self.selected_color_idx]["id"]
-        self.game.loadout = {"hull": hull_id, "color": color_id}
+        ordnance_id = self.hangar_data.get("equipped_ordnance", "missile")
+        self.game.loadout = {"hull": hull_id, "color": color_id, "ordnance": ordnance_id}
         if hasattr(self.game, 'save_system'):
-            self.game.save_system.save_loadout(hull_id, color_id)
+            self.game.save_system.save_loadout(hull_id, color_id, ordnance_id, user_id=self._get_user_id())
+
+    def _set_status(self, msg, color=(0, 240, 255)):
+        self.status_message = msg
+        self.status_color = color
+        self.status_timer = 3.0
 
     def _proceed(self):
         self._save_and_sync()
@@ -979,146 +1137,212 @@ class HangarState(State):
                         self.game.audio.play_ui("confirm")
                     self.game.change_state(LevelSelectState(self.game))
                     return
-                if self.prev_hull_rect.collidepoint(pos):
-                    self.selected_hull_idx = (self.selected_hull_idx - 1) % len(self.HULLS)
-                    self._save_and_sync()
-                    if hasattr(self.game, 'audio') and self.game.audio:
-                        self.game.audio.play_ui("tick")
-                    return
-                if self.next_hull_rect.collidepoint(pos):
-                    self.selected_hull_idx = (self.selected_hull_idx + 1) % len(self.HULLS)
-                    self._save_and_sync()
-                    if hasattr(self.game, 'audio') and self.game.audio:
-                        self.game.audio.play_ui("tick")
-                    return
 
-                # Hull tab click
-                for i, r in enumerate(self.hull_rects):
-                    if r.collidepoint(pos):
-                        self.selected_hull_idx = i
+                # Tab switching
+                for t_idx, t_rect in enumerate(self.tab_rects):
+                    if t_rect.collidepoint(pos):
+                        self.active_tab = t_idx
+                        if hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui("tick")
+                        return
+
+                # TAB 0: SHIP CHASSIS
+                if self.active_tab == 0:
+                    if self.prev_hull_rect.collidepoint(pos):
+                        self.selected_hull_idx = (self.selected_hull_idx - 1) % len(self.HULLS)
+                        self._save_and_sync()
+                        if hasattr(self.game, 'audio') and self.game.audio:
+                            self.game.audio.play_ui("tick")
+                        return
+                    if self.next_hull_rect.collidepoint(pos):
+                        self.selected_hull_idx = (self.selected_hull_idx + 1) % len(self.HULLS)
                         self._save_and_sync()
                         if hasattr(self.game, 'audio') and self.game.audio:
                             self.game.audio.play_ui("tick")
                         return
 
-                # Color swatch click
-                for i, r in enumerate(self.swatch_rects):
-                    if r.collidepoint(pos):
-                        self.selected_color_idx = i
-                        self._save_and_sync()
-                        if hasattr(self.game, 'audio') and self.game.audio:
-                            self.game.audio.play_ui("tick")
-                        return
+                    for i, r in enumerate(self.hull_rects):
+                        if r.collidepoint(pos):
+                            self.selected_hull_idx = i
+                            self._save_and_sync()
+                            if hasattr(self.game, 'audio') and self.game.audio:
+                                self.game.audio.play_ui("tick")
+                            return
+
+                    for i, r in enumerate(self.swatch_rects):
+                        if r.collidepoint(pos):
+                            self.selected_color_idx = i
+                            self._save_and_sync()
+                            if hasattr(self.game, 'audio') and self.game.audio:
+                                self.game.audio.play_ui("tick")
+                            return
+
+                    # Hull Unlock Button
+                    curr_hull = self.HULLS[self.selected_hull_idx]["id"]
+                    if curr_hull not in self.hangar_data.get("unlocked_hulls", ["interceptor"]):
+                        if self.hull_unlock_rect.collidepoint(pos):
+                            res = self.game.save_system.unlock_hull(curr_hull, self.total_stars, user_id=self._get_user_id())
+                            if res.get("success"):
+                                self._refresh_hangar_data()
+                                self._save_and_sync()
+                                self._set_status(f"🎉 {self.HULLS[self.selected_hull_idx]['name']} UNLOCKED!", (0, 255, 180))
+                                if hasattr(self.game, 'audio') and self.game.audio:
+                                    self.game.audio.play_sfx("powerup")
+                            else:
+                                self._set_status(res.get("error", "Cannot unlock hull."), (255, 90, 90))
+                                if hasattr(self.game, 'audio') and self.game.audio:
+                                    self.game.audio.play_ui_back()
+
+                # TAB 1: TECH TREE UPGRADES
+                elif self.active_tab == 1:
+                    for i, b_rect in enumerate(self.upgrade_buy_rects):
+                        if b_rect.collidepoint(pos):
+                            item = self.UPGRADE_CATALOG[i]
+                            res = self.game.save_system.purchase_upgrade(item["id"], user_id=self._get_user_id())
+                            if res.get("success"):
+                                self._refresh_hangar_data()
+                                self._set_status(f"⚡ {item['name']} UPGRADED TO TIER {res['new_tier']}!", (0, 255, 200))
+                                if hasattr(self.game, 'audio') and self.game.audio:
+                                    self.game.audio.play_sfx("shield_up")
+                            else:
+                                self._set_status(res.get("error", "Purchase failed."), (255, 90, 90))
+                                if hasattr(self.game, 'audio') and self.game.audio:
+                                    self.game.audio.play_ui_back()
+
+                # TAB 2: SECONDARY ORDNANCE
+                elif self.active_tab == 2:
+                    for i, b_rect in enumerate(self.ordnance_equip_rects):
+                        if b_rect.collidepoint(pos):
+                            ord_item = self.ORDNANCE_CATALOG[i]
+                            ord_id = ord_item["id"]
+                            unlocked = self.hangar_data.get("unlocked_ordnance", ["missile"])
+                            if ord_id in unlocked:
+                                # Equip
+                                self.hangar_data["equipped_ordnance"] = ord_id
+                                self._save_and_sync()
+                                self._set_status(f"🚀 {ord_item['name']} EQUIPPED!", (0, 255, 200))
+                                if hasattr(self.game, 'audio') and self.game.audio:
+                                    self.game.audio.play_ui("confirm")
+                            else:
+                                # Purchase unlock
+                                cost = ord_item["cost"]
+                                cr = self.hangar_data.get("credits", 0)
+                                if cr >= cost:
+                                    self.game.save_system.add_credits(-cost, user_id=self._get_user_id())
+                                    if "unlocked_ordnance" not in self.hangar_data:
+                                        self.hangar_data["unlocked_ordnance"] = ["missile"]
+                                    self.hangar_data["unlocked_ordnance"].append(ord_id)
+                                    self.hangar_data["equipped_ordnance"] = ord_id
+                                    self._save_and_sync()
+                                    self._refresh_hangar_data()
+                                    self._set_status(f"🎉 {ord_item['name']} UNLOCKED & EQUIPPED!", (0, 255, 200))
+                                    if hasattr(self.game, 'audio') and self.game.audio:
+                                        self.game.audio.play_sfx("powerup")
+                                else:
+                                    self._set_status(f"Requires {cost} Nanite Credits ({cr}/{cost}).", (255, 90, 90))
+                                    if hasattr(self.game, 'audio') and self.game.audio:
+                                        self.game.audio.play_ui_back()
 
             elif event.type == pg.KEYDOWN:
                 if event.key in (pg.K_ESCAPE, pg.K_BACKSPACE):
                     self._proceed()
                 elif event.key in (pg.K_RETURN, pg.K_SPACE):
                     self._proceed()
+                elif event.key == pg.K_TAB:
+                    self.active_tab = (self.active_tab + 1) % len(self.TABS)
 
         # InputMap actions (Gamepad / Keyboard)
-        if self.game.input.is_pressed("left"):
-            self.selected_hull_idx = (self.selected_hull_idx - 1) % len(self.HULLS)
-            self._save_and_sync()
-            if hasattr(self.game, 'audio') and self.game.audio:
-                self.game.audio.play_ui_hover()
-            self.game.cursor.snap_to(self.hull_rects[self.selected_hull_idx].centerx, self.hull_rects[self.selected_hull_idx].centery)
-
-        elif self.game.input.is_pressed("right"):
-            self.selected_hull_idx = (self.selected_hull_idx + 1) % len(self.HULLS)
-            self._save_and_sync()
-            if hasattr(self.game, 'audio') and self.game.audio:
-                self.game.audio.play_ui_hover()
-            self.game.cursor.snap_to(self.hull_rects[self.selected_hull_idx].centerx, self.hull_rects[self.selected_hull_idx].centery)
-
-        elif self.game.input.is_pressed("up") or self.game.input.is_pressed("down"):
-            self.selected_color_idx = (self.selected_color_idx + 1) % len(self.COLORS)
-            self._save_and_sync()
-            if hasattr(self.game, 'audio') and self.game.audio:
-                self.game.audio.play_ui_hover()
-
-        elif self.game.input.is_pressed("confirm"):
-            self._proceed()
-
-        elif self.game.input.is_pressed("cancel"):
+        if self.game.input.is_pressed("cancel"):
             self.game.audio.play_ui_back()
             self._proceed()
 
     def update(self, dt):
         self.starfield.update(dt)
         self.anim_timer += dt
+        if self.status_timer > 0:
+            self.status_timer -= dt
 
         pos = pg.mouse.get_pos()
-        is_hovered = self.back_hovered or self.deploy_hovered or self.prev_hovered or self.next_hovered or any(r.collidepoint(pos) for r in self.hull_rects) or any(r.collidepoint(pos) for r in self.swatch_rects)
         cursor = getattr(self.game, 'cursor', None)
         if cursor:
+            is_hovered = (
+                self.back_hovered or self.deploy_hovered or
+                any(r.collidepoint(pos) for r in self.tab_rects) or
+                (self.active_tab == 0 and (self.prev_hovered or self.next_hovered or any(r.collidepoint(pos) for r in self.hull_rects) or any(r.collidepoint(pos) for r in self.swatch_rects))) or
+                (self.active_tab == 1 and any(r.collidepoint(pos) for r in self.upgrade_buy_rects)) or
+                (self.active_tab == 2 and any(r.collidepoint(pos) for r in self.ordnance_equip_rects))
+            )
             cursor.set_hover_state(is_hovered)
-        tooltip = getattr(self.game, 'tooltip', None)
-        if tooltip:
-            tooltip.clear()
-
 
     def draw(self, screen):
-        # Dark industrial hangar bay background
         screen.fill((10, 13, 22))
         self.starfield.draw(screen)
 
-        # Draw structural greeble elements on the hangar wall
+        # Greebles backdrop
         for g in self.greebles:
             img = self.game.assets.get_image(f"modular_shipyard/{g['name']}", g["w"], g["h"])
             if img:
                 temp = img.copy()
-                temp.set_alpha(g.get("alpha", 50))
+                temp.set_alpha(g.get("alpha", 45))
                 screen.blit(temp, (g["x"], g["y"]))
 
-        # Hangar Bay Landing Pad / Platform Glow
-        pad_center = (self.game.width // 2, 305)
-        pad_rect = pg.Rect(pad_center[0] - 170, pad_center[1] - 85, 340, 170)
+        # Back & Deploy buttons
+        back_label = "← MENU" if self.return_state == "menu" else "← LEVELS"
+        _draw_ui_button(screen, self.back_rect, back_label, self.game.assets.font, hovered=self.back_hovered, fill=(26, 36, 52, 200), border=(80, 120, 160, 255) if self.back_hovered else (60, 90, 130, 255), text_color=(190, 215, 235))
+        _draw_ui_button(screen, self.deploy_rect, "DEPLOY ✓", self.game.assets.font, hovered=self.deploy_hovered, fill=(18, 75, 45, 220), border=(80, 255, 140, 255) if self.deploy_hovered else (40, 200, 100, 255), text_color=(220, 255, 230), pulse=self.anim_timer * 8)
+
+        # Top Tabs
+        mouse_pos = pg.mouse.get_pos()
+        for t_idx, (t_name, t_rect) in enumerate(zip(self.TABS, self.tab_rects)):
+            is_active = (t_idx == self.active_tab)
+            is_hov = t_rect.collidepoint(mouse_pos)
+            fill = (24, 58, 90, 230) if is_active else ((28, 38, 56, 180) if not is_hov else (38, 52, 74, 210))
+            border = (0, 240, 255, 255) if is_active else ((160, 210, 255, 200) if is_hov else (70, 95, 130, 200))
+            text_color = (255, 255, 255) if is_active else ((210, 235, 255) if is_hov else (150, 175, 200))
+
+            t_panel = pg.Surface((t_rect.width, t_rect.height), pg.SRCALPHA)
+            pg.draw.rect(t_panel, fill, t_panel.get_rect(), border_radius=8)
+            pg.draw.rect(t_panel, border, t_panel.get_rect(), 2 if is_active else 1, border_radius=8)
+            screen.blit(t_panel, t_rect)
+            lbl = self.game.assets.font.render(t_name, True, text_color)
+            screen.blit(lbl, lbl.get_rect(center=t_rect.center))
+
+        # Wallet & Stars Banner under Top Tabs
+        wallet_cr = self.hangar_data.get("credits", 0)
+        wallet_surf = self.game.assets.hud_font.render(f"⚡ {wallet_cr} NANITE CREDITS   |   ⭐ {self.total_stars}/30 CAMPAIGN STARS", True, (255, 220, 80))
+        screen.blit(wallet_surf, (self.game.width - wallet_surf.get_width() - 40, 86))
+
+        # TAB 0: SHIP CHASSIS & LIVERY
+        if self.active_tab == 0:
+            self._draw_tab_chassis(screen)
+        # TAB 1: ARMORY TECH TREE
+        elif self.active_tab == 1:
+            self._draw_tab_tech_tree(screen)
+        # TAB 2: SECONDARY ORDNANCE
+        elif self.active_tab == 2:
+            self._draw_tab_ordnance(screen)
+
+        # Status feedback toast
+        if self.status_timer > 0 and self.status_message:
+            alpha = min(255, int((self.status_timer / 3.0) * 350))
+            st_surf = self.game.assets.font.render(self.status_message, True, self.status_color)
+            st_surf.set_alpha(alpha)
+            screen.blit(st_surf, st_surf.get_rect(center=(self.game.width // 2, self.game.height - 25)))
+
+    def _draw_tab_chassis(self, screen):
+        # Platform Glow
+        pad_center = (self.game.width // 2, 285)
+        pad_rect = pg.Rect(pad_center[0] - 160, pad_center[1] - 80, 320, 160)
         pad_surf = pg.Surface((pad_rect.width, pad_rect.height), pg.SRCALPHA)
         pg.draw.ellipse(pad_surf, (14, 28, 48, 160), pad_surf.get_rect())
         pg.draw.ellipse(pad_surf, (0, 200, 255, int(100 + 40 * math.sin(self.anim_timer * 3))), pad_surf.get_rect(), 2)
-        # Inner staging ring
-        inner_rect = pg.Rect(35, 20, pad_rect.width - 70, pad_rect.height - 40)
-        pg.draw.ellipse(pad_surf, (0, 240, 255, int(60 + 20 * math.cos(self.anim_timer * 4))), inner_rect, 1)
         screen.blit(pad_surf, pad_rect)
-
-        # Header Title in Audiowide Cyber Display
-        title_surf = self.game.assets.title_font.render("SHIPYARD HANGAR", True, (0, 240, 255))
-        screen.blit(title_surf, title_surf.get_rect(center=(self.game.width // 2, 55)))
-
-        sub_header = self.game.assets.hud_font.render("SELECT HULL CHASSIS & FLIGHT PALETTE", True, (160, 200, 230))
-        screen.blit(sub_header, sub_header.get_rect(center=(self.game.width // 2, 90)))
-
-        # Header Navigation Buttons
-        back_label = "← MENU" if self.return_state == "menu" else "← LEVELS"
-        _draw_ui_button(
-            screen,
-            self.back_rect,
-            back_label,
-            self.game.assets.font,
-            hovered=self.back_hovered,
-            fill=(26, 36, 52, 190),
-            border=(80, 120, 160, 255) if self.back_hovered else (60, 90, 130, 255),
-            text_color=(190, 215, 235),
-            pulse=self.anim_timer * 6,
-        )
-
-        _draw_ui_button(
-            screen,
-            self.deploy_rect,
-            "CONFIRM ✓",
-            self.game.assets.font,
-            hovered=self.deploy_hovered,
-            fill=(18, 75, 45, 220),
-            border=(80, 255, 140, 255) if self.deploy_hovered else (40, 200, 100, 255),
-            text_color=(220, 255, 230),
-            pulse=self.anim_timer * 8,
-        )
 
         # Hull Selection Tabs
         for i, (h, r) in enumerate(zip(self.HULLS, self.hull_rects)):
             is_sel = (i == self.selected_hull_idx)
             is_hov = r.collidepoint(pg.mouse.get_pos())
+            is_unlocked = h["id"] in self.hangar_data.get("unlocked_hulls", ["interceptor"])
             fill = (22, 54, 82, 230) if is_sel else ((28, 38, 54, 180) if not is_hov else (34, 48, 70, 210))
             border = (0, 240, 255, 255) if is_sel else ((160, 210, 255, 200) if is_hov else (70, 95, 130, 200))
             text_color = (255, 255, 255) if is_sel else ((210, 235, 255) if is_hov else (150, 175, 200))
@@ -1128,89 +1352,56 @@ class HangarState(State):
             pg.draw.rect(panel, border, panel.get_rect(), 2 if is_sel else 1, border_radius=8)
             screen.blit(panel, r)
 
-            lbl = self.game.assets.font.render(h["name"].split()[0] + " " + h["name"].split()[1], True, text_color)
+            name_tag = h["name"].split()[0] + " " + h["name"].split()[1]
+            if not is_unlocked:
+                name_tag += " 🔒"
+            lbl = self.game.assets.font.render(name_tag, True, text_color)
             screen.blit(lbl, lbl.get_rect(center=r.center))
 
         # Carousel Arrows
-        _draw_ui_button(
-            screen,
-            self.prev_hull_rect,
-            "◀",
-            self.game.assets.title_font,
-            hovered=self.prev_hovered,
-            fill=(22, 38, 58, 200),
-            border=(0, 240, 255, 255) if self.prev_hovered else (70, 110, 150, 200),
-            text_color=(0, 240, 255) if self.prev_hovered else (180, 220, 255),
-        )
-        _draw_ui_button(
-            screen,
-            self.next_hull_rect,
-            "▶",
-            self.game.assets.title_font,
-            hovered=self.next_hovered,
-            fill=(22, 38, 58, 200),
-            border=(0, 240, 255, 255) if self.next_hovered else (70, 110, 150, 200),
-            text_color=(0, 240, 255) if self.next_hovered else (180, 220, 255),
-        )
+        _draw_ui_button(screen, self.prev_hull_rect, "◀", self.game.assets.title_font, hovered=self.prev_hovered, fill=(22, 38, 58, 200), border=(0, 240, 255, 255) if self.prev_hovered else (70, 110, 150, 200), text_color=(0, 240, 255) if self.prev_hovered else (180, 220, 255))
+        _draw_ui_button(screen, self.next_hull_rect, "▶", self.game.assets.title_font, hovered=self.next_hovered, fill=(22, 38, 58, 200), border=(0, 240, 255, 255) if self.next_hovered else (70, 110, 150, 200), text_color=(0, 240, 255) if self.next_hovered else (180, 220, 255))
 
-        # Active Hull & Color Data
+        # Live Ship Preview
         hull_data = self.HULLS[self.selected_hull_idx]
         color_data = self.COLORS[self.selected_color_idx]
         hull_id = hull_data["id"]
         color_id = color_data["id"]
+        is_unlocked = hull_id in self.hangar_data.get("unlocked_hulls", ["interceptor"])
 
-        # ---------------- LIVE SHIP PREVIEW ----------------
-        # Hull Sprite lookup
         ship_key = f"player_fleet/interceptor_strike_{color_id}"
         if hull_id == "cruiser":
             ship_key = f"player_fleet/heavy_cruiser_assault_{color_id}"
         elif hull_id == "vanguard":
             ship_key = f"player_fleet/stealth_vanguard_bomber_{color_id}"
 
-        ship_img = self.game.assets.get_image(ship_key, 120, 120)
-
-        # Gentle yaw/tilt animation
+        ship_img = self.game.assets.get_image(ship_key, 110, 110)
         tilt_angle = 3.5 * math.sin(self.anim_timer * 2.0)
         bob_offset = 5.0 * math.sin(self.anim_timer * 2.8)
         ship_center = (pad_center[0], pad_center[1] - 15 + int(bob_offset))
 
         if ship_img:
             rotated_ship = pg.transform.rotate(ship_img, tilt_angle)
-            # Thruster Plume Animation below ship
             thruster_frame = int((self.anim_timer * 16) % len(self.thrusters))
             plume = self.thrusters[thruster_frame]
-            plume_w, plume_h = 24, 40
-            scaled_plume = pg.transform.smoothscale(plume, (plume_w, plume_h))
-
-            # Position thrusters based on hull
+            scaled_plume = pg.transform.smoothscale(plume, (22, 36))
             if hull_id == "cruiser":
-                # Dual engines
-                screen.blit(scaled_plume, (ship_center[0] - 28 - plume_w // 2, ship_center[1] + 36))
-                screen.blit(scaled_plume, (ship_center[0] + 28 - plume_w // 2, ship_center[1] + 36))
+                screen.blit(scaled_plume, (ship_center[0] - 26 - 11, ship_center[1] + 32))
+                screen.blit(scaled_plume, (ship_center[0] + 26 - 11, ship_center[1] + 32))
             else:
-                # Single center engine
-                screen.blit(scaled_plume, (ship_center[0] - plume_w // 2, ship_center[1] + 38))
+                screen.blit(scaled_plume, (ship_center[0] - 11, ship_center[1] + 34))
 
-            ship_rect = rotated_ship.get_rect(center=ship_center)
-            screen.blit(rotated_ship, ship_rect)
+            if not is_unlocked:
+                rotated_ship.set_alpha(150)
+            screen.blit(rotated_ship, rotated_ship.get_rect(center=ship_center))
 
-            # Sparkle bursts on the polished hull
-            if int(self.anim_timer * 2.5) % 2 == 0:
-                sp_x = ship_center[0] + int(24 * math.sin(self.anim_timer * 5))
-                sp_y = ship_center[1] - 20 + int(14 * math.cos(self.anim_timer * 4))
-                sp_alpha = int(120 + 80 * math.sin(self.anim_timer * 12))
-                temp_sp = self.sparkle.copy()
-                temp_sp.set_alpha(max(0, min(255, sp_alpha)))
-                screen.blit(temp_sp, temp_sp.get_rect(center=(sp_x, sp_y)))
-
-        # Ship Nameplate in Audiowide Cyber Display
+        # Nameplate & Role
         name_surf = self.game.assets.title_font.render(hull_data["name"], True, hull_data["color_accent"])
-        screen.blit(name_surf, name_surf.get_rect(center=(self.game.width // 2, 388)))
-
+        screen.blit(name_surf, name_surf.get_rect(center=(self.game.width // 2, 370)))
         role_surf = self.game.assets.hud_font.render(hull_data["role"].upper(), True, (190, 220, 240))
-        screen.blit(role_surf, role_surf.get_rect(center=(self.game.width // 2, 416)))
+        screen.blit(role_surf, role_surf.get_rect(center=(self.game.width // 2, 396)))
 
-        # ---------------- COLOR SWATCHES ----------------
+        # Color Swatches
         for i, (c, r) in enumerate(zip(self.COLORS, self.swatch_rects)):
             is_sel = (i == self.selected_color_idx)
             is_hov = r.collidepoint(pg.mouse.get_pos())
@@ -1220,23 +1411,30 @@ class HangarState(State):
                 pg.draw.rect(swatch_surf, (255, 255, 255), swatch_surf.get_rect(), 3, border_radius=6)
             elif is_hov:
                 pg.draw.rect(swatch_surf, (220, 240, 255), swatch_surf.get_rect(), 2, border_radius=6)
-            else:
-                pg.draw.rect(swatch_surf, (20, 25, 35), swatch_surf.get_rect(), 1, border_radius=6)
             screen.blit(swatch_surf, r)
 
-        color_label = self.game.assets.hud_font.render(f"PALETTE: {color_data['name'].upper()}", True, color_data["swatch"])
-        screen.blit(color_label, color_label.get_rect(center=(self.game.width // 2, 496)))
+        # Unlock Button if locked
+        if not is_unlocked:
+            can_afford = (self.hangar_data.get("credits", 0) >= hull_data["cost"]) or (self.total_stars >= hull_data["stars"] and hull_data["stars"] > 0)
+            u_btn_hov = self.hull_unlock_rect.collidepoint(pg.mouse.get_pos())
+            _draw_ui_button(
+                screen,
+                self.hull_unlock_rect,
+                f"UNLOCK [⚡{hull_data['cost']} or ⭐{hull_data['stars']}]",
+                self.game.assets.font,
+                hovered=u_btn_hov,
+                fill=(160, 90, 20, 220) if can_afford else (70, 35, 35, 200),
+                border=(255, 200, 50) if can_afford else (130, 60, 60),
+                text_color=(255, 240, 150) if can_afford else (180, 120, 120),
+            )
 
-        # ---------------- SPECIFICATION CARDS (LEFT & RIGHT PANELS) ----------------
-        # Left Panel: Specifications
-        spec_rect = pg.Rect(55, 520, 360, 165)
+        # Left Spec Panel
+        spec_rect = pg.Rect(55, 490, 360, 175)
         spec_panel = pg.Surface((spec_rect.width, spec_rect.height), pg.SRCALPHA)
         pg.draw.rect(spec_panel, (18, 26, 40, 220), spec_panel.get_rect(), border_radius=10)
         pg.draw.rect(spec_panel, (60, 95, 140, 200), spec_panel.get_rect(), 2, border_radius=10)
         screen.blit(spec_panel, spec_rect)
-
-        spec_header = self.game.assets.font.render("HULL SPECIFICATIONS", True, (0, 240, 255))
-        screen.blit(spec_header, (spec_rect.x + 18, spec_rect.y + 12))
+        screen.blit(self.game.assets.font.render("HULL SPECIFICATIONS", True, (0, 240, 255)), (spec_rect.x + 18, spec_rect.y + 12))
 
         specs = [
             ("TOP SPEED", hull_data["speed"], (120, 255, 200)),
@@ -1246,26 +1444,22 @@ class HangarState(State):
             ("ORDNANCE PAYLOAD", hull_data["missiles"], (255, 160, 60)),
         ]
         for idx, (label, val, col) in enumerate(specs):
-            row_y = spec_rect.y + 40 + idx * 24
+            row_y = spec_rect.y + 38 + idx * 25
             l_surf = self.game.assets.hud_font.render(label, True, (160, 180, 205))
             v_surf = self.game.assets.hud_font.render(val, True, col)
             screen.blit(l_surf, (spec_rect.x + 18, row_y))
             screen.blit(v_surf, (spec_rect.right - 18 - v_surf.get_width(), row_y))
 
-        # Right Panel: Tactical Combat Trait
-        trait_rect = pg.Rect(self.game.width - 415, 520, 360, 165)
+        # Right Combat Trait Panel
+        trait_rect = pg.Rect(self.game.width - 415, 490, 360, 175)
         trait_panel = pg.Surface((trait_rect.width, trait_rect.height), pg.SRCALPHA)
         pg.draw.rect(trait_panel, (18, 26, 40, 220), trait_panel.get_rect(), border_radius=10)
         pg.draw.rect(trait_panel, (60, 95, 140, 200), trait_panel.get_rect(), 2, border_radius=10)
         screen.blit(trait_panel, trait_rect)
+        screen.blit(self.game.assets.font.render("COMBAT CAPABILITY", True, (0, 240, 255)), (trait_rect.x + 18, trait_rect.y + 12))
 
-        trait_header = self.game.assets.font.render("COMBAT CAPABILITY", True, (0, 240, 255))
-        screen.blit(trait_header, (trait_rect.x + 18, trait_rect.y + 12))
-
-        # Multi-line wrapped trait description
         words = hull_data["trait"].split()
-        t_lines = []
-        curr_l = []
+        t_lines, curr_l = [], []
         for w in words:
             curr_l.append(w)
             rendered = self.game.assets.hud_font.render(" ".join(curr_l), True, (190, 215, 240))
@@ -1280,9 +1474,149 @@ class HangarState(State):
             line_surf = self.game.assets.hud_font.render(line_str, True, (200, 225, 245))
             screen.blit(line_surf, (trait_rect.x + 18, trait_rect.y + 44 + line_idx * 24))
 
-        # Persistent status notice at bottom center
-        ready_tag = self.game.assets.hud_font.render("LOADOUT STORED IN SETTINGS.JSON — READY FOR FLIGHT", True, (140, 175, 210))
-        screen.blit(ready_tag, ready_tag.get_rect(center=(self.game.width // 2, 695)))
+    def _draw_tab_tech_tree(self, screen):
+        upgrades = self.hangar_data.get("upgrades", {})
+        credits_avail = self.hangar_data.get("credits", 0)
+        mouse_pos = pg.mouse.get_pos()
+
+        for idx, (item, b_rect) in enumerate(zip(self.UPGRADE_CATALOG, self.upgrade_buy_rects)):
+            row_rect = pg.Rect(80, 105 + idx * 105, self.game.width - 160, 92)
+            is_hov = row_rect.collidepoint(mouse_pos)
+            tier = upgrades.get(item["id"], 0)
+            max_tier = len(item["costs"])
+            cost = item["costs"][tier] if tier < max_tier else 0
+            can_buy = (credits_avail >= cost) and (tier < max_tier)
+
+            # Row container
+            panel = pg.Surface((row_rect.width, row_rect.height), pg.SRCALPHA)
+            fill_c = (20, 32, 50, 220) if not is_hov else (28, 44, 68, 240)
+            border_c = item["color"] if is_hov else (60, 90, 130, 180)
+            pg.draw.rect(panel, fill_c, panel.get_rect(), border_radius=10)
+            pg.draw.rect(panel, border_c, panel.get_rect(), 2 if is_hov else 1, border_radius=10)
+            screen.blit(panel, row_rect)
+
+            # Title & Description
+            title_txt = f"{item['icon']} {item['name']}"
+            t_surf = self.game.assets.font.render(title_txt, True, item["color"])
+            screen.blit(t_surf, (row_rect.x + 20, row_rect.y + 12))
+
+            d_surf = self.game.assets.hud_font.render(item["desc"], True, (170, 195, 220))
+            screen.blit(d_surf, (row_rect.x + 20, row_rect.y + 38))
+
+            # Tier Pips (5 segment rectangles)
+            pips_x = row_rect.x + 20
+            pips_y = row_rect.y + 64
+            for p in range(max_tier):
+                pip_r = pg.Rect(pips_x + p * 32, pips_y, 26, 14)
+                if p < tier:
+                    pg.draw.rect(screen, item["color"], pip_r, border_radius=3)
+                else:
+                    pg.draw.rect(screen, (35, 45, 60), pip_r, border_radius=3)
+                    pg.draw.rect(screen, (70, 90, 115), pip_r, 1, border_radius=3)
+
+            # Stat summary & Live Delta on hover
+            stat_val = item["base_val"] + tier * item["bonus_per_tier"]
+            stat_str = f"{item['stat_label']}: {stat_val} {item['unit']}"
+            if is_hov and tier < max_tier:
+                next_val = stat_val + item["bonus_per_tier"]
+                stat_str += f" ➔ {next_val} (+{item['bonus_per_tier']})"
+            stat_surf = self.game.assets.hud_font.render(stat_str, True, (0, 255, 180) if is_hov else (200, 225, 245))
+            screen.blit(stat_surf, (row_rect.x + 210, pips_y - 2))
+
+            # Buy / Max Button
+            btn_hov = b_rect.collidepoint(mouse_pos)
+            if tier >= max_tier:
+                _draw_ui_button(screen, b_rect, "MAX TIER ✓", self.game.assets.font, hovered=False, fill=(35, 50, 40, 200), border=(0, 255, 140), text_color=(0, 255, 180))
+            else:
+                btn_lbl = f"UPGRADE [⚡{cost}]"
+                _draw_ui_button(
+                    screen,
+                    b_rect,
+                    btn_lbl,
+                    self.game.assets.font,
+                    hovered=btn_hov,
+                    fill=(18, 70, 45, 220) if can_buy else (60, 30, 35, 200),
+                    border=(80, 255, 140) if can_buy else (130, 60, 60),
+                    text_color=(220, 255, 230) if can_buy else (180, 120, 120),
+                    pulse=self.anim_timer * 6 if can_buy else 0,
+                )
+
+    def _draw_tab_ordnance(self, screen):
+        equipped = self.hangar_data.get("equipped_ordnance", "missile")
+        unlocked = self.hangar_data.get("unlocked_ordnance", ["missile"])
+        credits_avail = self.hangar_data.get("credits", 0)
+        mouse_pos = pg.mouse.get_pos()
+
+        for idx, (ord_item, c_rect, eq_rect) in enumerate(zip(self.ORDNANCE_CATALOG, self.ordnance_card_rects, self.ordnance_equip_rects)):
+            is_eq = (ord_item["id"] == equipped)
+            is_unl = (ord_item["id"] in unlocked)
+            is_hov = c_rect.collidepoint(mouse_pos)
+
+            # Card Container
+            panel = pg.Surface((c_rect.width, c_rect.height), pg.SRCALPHA)
+            fill_c = (24, 42, 68, 230) if is_eq else ((18, 28, 44, 200) if not is_hov else (26, 38, 58, 220))
+            border_c = (0, 240, 255) if is_eq else (ord_item["color"] if is_hov else (60, 90, 130, 180))
+            pg.draw.rect(panel, fill_c, panel.get_rect(), border_radius=12)
+            pg.draw.rect(panel, border_c, panel.get_rect(), 3 if is_eq else (2 if is_hov else 1), border_radius=12)
+            screen.blit(panel, c_rect)
+
+            # Header & Weapon Icon
+            title_surf = self.game.assets.title_font.render(ord_item["name"], True, ord_item["color"])
+            screen.blit(title_surf, title_surf.get_rect(center=(c_rect.centerx, c_rect.y + 45)))
+
+            # Icon graphic preview
+            icon_key = "missile" if ord_item["id"] == "missile" else ("cluster_missile" if ord_item["id"] == "cluster" else "ion_emp_orb")
+            icon_img = self.game.assets.get_image(icon_key, 44, 44)
+            if icon_img:
+                screen.blit(icon_img, icon_img.get_rect(center=(c_rect.centerx, c_rect.y + 115)))
+
+            # Specs
+            specs_y = c_rect.y + 175
+            spec_rows = [
+                ("PAYLOAD DAMAGE", ord_item["damage"], (255, 140, 100)),
+                ("FIRING CADENCE", ord_item["cadence"], (255, 220, 100)),
+                ("ACTIVATION KEY", "[M] or GAMEPAD [B]", (0, 240, 255)),
+            ]
+            for s_i, (l_str, v_str, col) in enumerate(spec_rows):
+                s_y = specs_y + s_i * 26
+                screen.blit(self.game.assets.hud_font.render(l_str, True, (160, 185, 210)), (c_rect.x + 25, s_y))
+                v_s = self.game.assets.hud_font.render(v_str, True, col)
+                screen.blit(v_s, (c_rect.right - 25 - v_s.get_width(), s_y))
+
+            # Description
+            words = ord_item["desc"].split()
+            lines, curr_l = [], []
+            for w in words:
+                curr_l.append(w)
+                rendered = self.game.assets.hud_font.render(" ".join(curr_l), True, (190, 215, 240))
+                if rendered.get_width() > c_rect.width - 40:
+                    curr_l.pop()
+                    lines.append(" ".join(curr_l))
+                    curr_l = [w]
+            if curr_l:
+                lines.append(" ".join(curr_l))
+            for l_idx, l_txt in enumerate(lines):
+                screen.blit(self.game.assets.hud_font.render(l_txt, True, (180, 205, 230)), (c_rect.x + 25, specs_y + 90 + l_idx * 22))
+
+            # Equip / Purchase Button
+            btn_hov = eq_rect.collidepoint(mouse_pos)
+            if is_eq:
+                _draw_ui_button(screen, eq_rect, "EQUIPPED ✓", self.game.assets.font, hovered=False, fill=(20, 80, 50, 220), border=(0, 255, 160), text_color=(0, 255, 180))
+            elif is_unl:
+                _draw_ui_button(screen, eq_rect, "EQUIP", self.game.assets.font, hovered=btn_hov, fill=(24, 48, 75, 220), border=(0, 220, 255), text_color=(200, 240, 255))
+            else:
+                can_buy = credits_avail >= ord_item["cost"]
+                _draw_ui_button(
+                    screen,
+                    eq_rect,
+                    f"UNLOCK [⚡{ord_item['cost']}]",
+                    self.game.assets.font,
+                    hovered=btn_hov,
+                    fill=(160, 90, 20, 220) if can_buy else (60, 30, 35, 200),
+                    border=(255, 200, 50) if can_buy else (130, 60, 60),
+                    text_color=(255, 240, 150) if can_buy else (180, 120, 120),
+                )
+
 
 
 
@@ -1641,6 +1975,12 @@ class PlayState(State):
         self.damage_flash = 0.0
         self.boss_warning_timer = 0.0
         self.float_texts = []
+        # Sprint 15: In-mission currency and secondary ordnance tracking
+        self.credits_earned = 0
+
+    def _get_user_id(self):
+        curr_user = getattr(self.game, 'current_user', None)
+        return curr_user["id"] if curr_user and isinstance(curr_user, dict) and "id" in curr_user else None
 
         # Screen shake status
         self.shake_duration  = 0.0
@@ -2056,10 +2396,10 @@ class PlayState(State):
                     # Determine powerup drop pool based on current level
                     self._try_drop_powerup(enemy)
 
-        # 2. Homing missiles hitting enemies (Sprint 2)
+        # 2. Homing missiles & secondary ordnance hitting enemies (Sprint 2 & 15)
         missile_hits = pg.sprite.groupcollide(self.enemies, self.missiles, False, True)
         for enemy, missiles_hit in missile_hits.items():
-            for _ in missiles_hit:
+            for m in missiles_hit:
                 # Big orange-yellow explosion for missile impact
                 spawn_explosion(self.particles, enemy.rect.centerx, enemy.rect.centery,
                                 color=(255, 150, 0), count=40, speed_range=(80, 300))
@@ -2067,7 +2407,12 @@ class PlayState(State):
                 if hasattr(self, 'camera'):
                     self.camera.trigger_hit_stop(0.045)
                 
-                if enemy.get_hit(Missile.DAMAGE):
+                # Detonate cluster submunitions if applicable
+                if hasattr(m, 'detonate'):
+                    m.detonate()
+
+                dmg = getattr(m, 'damage', 30)
+                if enemy.get_hit(dmg):
                     points = int(enemy.score_value * self.combo_multiplier)
                     self.score += points
                     self.kills_since_powerup += 1
@@ -2089,8 +2434,9 @@ class PlayState(State):
                 if dist_sq <= graze_dist_sq and not self.player.rect.colliderect(elaser.rect):
                     elaser.grazed = True
                     self.player.graze_count += 1
-                    self.player.add_overdrive(12.0)
-                    graze_pts = int(50 * self.combo_multiplier)
+                    self.player.add_overdrive(getattr(self.player, 'graze_charge_amount', 12.0))
+                    graze_bonus = getattr(self.player, 'graze_score_bonus', 50)
+                    graze_pts = int(graze_bonus * self.combo_multiplier)
                     self.score += graze_pts
                     spawn_sparks(self.particles, elaser.rect.centerx, elaser.rect.centery, (0, 0), color=(100, 240, 255), count=6)
                     self.spawn_floating_text(elaser.rect.centerx, elaser.rect.centery - 10, f"GRAZE +{graze_pts}", color=(100, 240, 255), life=0.5, drift_y=-25)
@@ -2105,10 +2451,14 @@ class PlayState(State):
             for crystal in collected_crystals:
                 pts = int(crystal.score_value * self.combo_multiplier)
                 self.score += pts
+                self.credits_earned += 2
+                self.save_system.add_credits(2, user_id=self._get_user_id())
                 spawn_sparks(self.particles, crystal.rect.centerx, crystal.rect.centery, (0, 0), color=(0, 240, 255), count=8)
-                self.spawn_floating_text(crystal.rect.centerx, crystal.rect.centery - 10, f"+{pts}", color=(0, 255, 230), life=0.6, drift_y=-30)
+                self.spawn_floating_text(crystal.rect.centerx, crystal.rect.centery - 10, f"+{pts} (⚡+2)", color=(0, 255, 230), life=0.6, drift_y=-30)
                 if hasattr(self.game, 'audio') and self.game.audio:
                     self.game.audio.play_sfx("powerup", pos_x=crystal.rect.centerx, volume_mult=0.5)
+                elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
+                    self.game.assets.get_sound("powerup").play()
                 elif hasattr(self.game, 'assets') and hasattr(self.game.assets, 'get_sound'):
                     self.game.assets.get_sound("powerup").play()
 
@@ -2223,8 +2573,14 @@ class PlayState(State):
                 self.camera.trigger_hit_stop(0.045)
             if hasattr(self, 'pipeline'):
                 self.pipeline.trigger_flash(0.10, (255, 255, 255))
+            earned_cr = 20
         else:
             self.player.add_overdrive(4.0)
+            earned_cr = 5
+
+        # Sprint 15: Award Nanite Credits
+        self.credits_earned += earned_cr
+        self.save_system.add_credits(earned_cr, user_id=self._get_user_id())
 
         if self.combo_count > 1:
             # Increase multiplier (step each kill, cap at COMBO_CAP)

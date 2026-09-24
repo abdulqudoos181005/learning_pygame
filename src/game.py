@@ -42,15 +42,17 @@ class Game:
         from audio.director import AudioDirector
         self.audio = AudioDirector(assets=self.assets, screen_width=self.width)
         
-        # Sprint 13 / Phase 2: Database Engine & Backend Repositories
+        # Sprint 13 / Phase 2 & Sprint 15: Database Engine & Backend Repositories
         from db.manager import DatabaseManager
         from db.auth_service import AuthService
         from db.score_repository import ScoreRepository
         from db.progress_repository import ProgressRepository
+        from db.hangar_repository import HangarRepository
         self.db = DatabaseManager()
         self.auth_service = AuthService(self.db)
         self.score_repo = ScoreRepository(self.db)
         self.progress_repo = ProgressRepository(self.db)
+        self.hangar_repo = HangarRepository(self.db)
 
         # Save System & persistent player loadout & settings (connected to database)
         from save_system import SaveSystem
@@ -58,6 +60,7 @@ class Game:
             db_manager=self.db,
             score_repo=self.score_repo,
             progress_repo=self.progress_repo,
+            hangar_repo=self.hangar_repo,
         )
         self.settings = self.save_system.load_settings()
         self.loadout = self.save_system.load_loadout()
