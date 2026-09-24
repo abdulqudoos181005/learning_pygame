@@ -17,6 +17,7 @@ class SaveSystem:
         db_manager=None,
         score_repo=None,
         progress_repo=None,
+        hangar_repo=None,
     ):
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.filepath = os.path.join(project_root, filename)
@@ -27,6 +28,7 @@ class SaveSystem:
         self.db = db_manager
         self.score_repo = score_repo
         self.progress_repo = progress_repo
+        self.hangar_repo = hangar_repo
 
         # Lazy initialize repositories if db_manager is supplied without repos
         if self.db and not self.score_repo:
@@ -43,6 +45,13 @@ class SaveSystem:
             except Exception as e:
                 print(f"[SaveSystem] Warning initializing ProgressRepository: {e}")
 
+        if self.db and not self.hangar_repo:
+            try:
+                from db.hangar_repository import HangarRepository
+                self.hangar_repo = HangarRepository(self.db)
+            except Exception as e:
+                print(f"[SaveSystem] Warning initializing HangarRepository: {e}")
+
     def load_settings(self):
         """Loads complete user settings dict (volumes, visuals, controls, accessibility, loadout)."""
         defaults = {
@@ -56,6 +65,17 @@ class SaveSystem:
             "screen_flash": True,
             "hull": "interceptor",
             "color": "blue",
+            "ordnance": "missile",
+            "credits": 0,
+            "unlocked_hulls": ["interceptor"],
+            "unlocked_ordnance": ["missile"],
+            "upgrades": {
+                "armor": 0,
+                "shield": 0,
+                "magnet": 0,
+                "graze": 0,
+                "ordnance_bay": 0,
+            },
             "keybinds": {
                 "up": "w",
                 "down": "s",
