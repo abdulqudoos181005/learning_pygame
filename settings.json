@@ -10,7 +10,7 @@
     "hull": "vanguard",
     "color": "red",
     "ordnance": "missile",
-    "credits": 2,
+    "credits": 4,
     "unlocked_hulls": [
         "interceptor"
     ],
