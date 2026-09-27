@@ -7,7 +7,7 @@
     "hitmarkers": true,
     "fullscreen": true,
     "screen_flash": true,
-    "hull": "vanguard",
+    "hull": "interceptor",
     "color": "red",
     "ordnance": "missile",
     "credits": 4,
