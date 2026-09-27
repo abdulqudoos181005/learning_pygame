@@ -1570,6 +1570,157 @@ graph TD
 #### Project-Wide Test Suite
 - Run all 76+ test cases to verify 0 regressions across earlier sprints.
 
+---
+
+## Sprint 16 — Comprehensive UI/UX Overhaul: Responsive Cards, Text Layout Engine & Viewport Hierarchy
+
+Sprint 16 conducts a systematic design and engineering overhaul of the UI/UX architecture. It eliminates card over-scaling, runaway text overflow, window occlusion, and interactive layout collisions across all 15 game states and HUD systems.
+
+### UI/UX Audit Findings & Root Causes
+
+```
++---------------------------------------------------------------------------------------------------------+
+|                                    SPRINT 16 UI/UX AUDIT DEFECT MATRIX                                  |
++--------------------------+------------------------------+-------------------------+---------------------+
+| Component / State        | Defect Category              | Measured Discrepancy    | Root Cause          |
++--------------------------+------------------------------+-------------------------+---------------------+
+| OptionsState (Controls)  | Text Overflow / Clipping     | 766px in 600px area     | No word-wrap engine |
+| HangarState (Ordnance)   | Card Title Overflow          | 355px title in 320px    | Oversized font size |
+| HangarState (Tech Tree)  | Button / Row Coordinate Drift| +25px drift by Row 4    | y-step (105 vs 110) |
+| HUD (Combat / Boss)      | Window Occlusion / Blocking  | Boss badge over OD bar  | y=60 vs y=55 center |
+| LevelSelectState         | Tooltip Blocking Windows     | Tooltip covers Row 1    | Downward anchor bias|
+| LoginState (Auth Card)   | Cramped Text Area & Labels   | 4px gap between fields  | Inadequate spacing  |
+| LoginState (Banner)      | Text Area Overflow           | >500px in banner        | Single-line render  |
+| InstructionsState        | Card Vertical Squeeze        | 675px out of 720px      | Fixed card_h=240    |
+| HighScoresState          | Text Overlap / Collision     | Callsign collides score | Unbounded name text |
+| LevelCompleteState       | Missing Card Hierarchy       | Floating unboxed text   | Lack of debrief card|
++--------------------------+------------------------------+-------------------------+---------------------+
+```
+
+---
+
+### 3-Phase Roadmap
+
+```mermaid
+graph TD
+    subgraph Phase 1: Shared Layout & Text-Fitting Engine
+        P1A[src/ui/layout_utils.py] --> P1B[fit_text_to_width & auto_ellipsis]
+        P1B --> P1C[draw_wrapped_text with bounds clipping]
+        P1C --> P1D[card_title_font in AssetsLoader: 24-26px]
+    end
+
+    subgraph Phase 2: Card Proportions & Text Containment
+        P2A[Hangar Ordnance Cards: responsive titles] --> P2B[Tech Tree y-step synchronization]
+        P2B --> P2C[Options 2-column keymap grid: eliminates 166px overflow]
+        P2C --> P2D[LoginState breathing room: 12px label margins & banner wrap]
+        P2D --> P2E[InstructionsState proportional card height & padding]
+    end
+
+    subgraph Phase 3: Viewport Hierarchy, HUD & Window De-Confliction
+        P3A[HUD Boss Badge relocation: clears Overdrive bar] --> P3B[LevelSelect smart tooltip positioning]
+        P3B --> P3C[HighScores table column clipping]
+        P3C --> P3D[LevelComplete glassmorphic debrief card & reward breakdown]
+    end
+```
+
+---
+
+### Phase 1: Shared Layout & Text-Fitting Engine (`src/ui/layout_utils.py`, `src/assets_loader.py`)
+
+#### 1. Universal Layout & Typography Utilities (`src/ui/layout_utils.py`)
+- **`draw_wrapped_text(surface, text, rect, font, color, line_spacing=4, align="left", max_lines=None)`**:
+  - Automatically wraps arbitrary text strings to strictly fit inside `rect.width`.
+  - Calculates line breaks respecting whole words and hyphenation.
+  - Enforces `max_lines` or `rect.height` bounds with elegant trailing ellipsis (`"..."`).
+  - Implements sub-surface clipping (`surface.set_clip(rect)`) to guarantee zero pixel leakage beyond container borders.
+- **`fit_text_to_width(font, text, max_width, ellipsis=True)`**:
+  - Truncates text exceeding `max_width` and appends `"..."` cleanly, ensuring strings never overlap adjacent columns or borders.
+- **`draw_glassmorphic_card(surface, rect, *, fill=(16, 24, 40, 225), border=(0, 220, 255, 200), border_width=2, radius=12, top_accent=True, accent_color=None)`**:
+  - Standardizes premium glassmorphism card rendering across all states.
+  - Generates consistent corner radii, inner glows, subtle gradient borders, and optional top accent bars.
+
+#### 2. Typography Scaling in AssetsLoader (`src/assets_loader.py`)
+- Adds intermediate font tiers to bridge the gap between `title_font` (40px) and `font` (22px):
+  - **`card_title_font`** (26px Trebuchet MS / Orbitron) — Tailored specifically for card headers so titles like `"CLUSTER BOMB POD"` fit cards cleanly.
+  - **`small_font`** (14px Trebuchet MS) — For dense secondary telemetry and sub-badges.
+
+---
+
+### Phase 2: Card Proportions, Typography & Text Containment (`src/states.py`, `src/ui/login_state.py`)
+
+#### 1. HangarState Card & Layout Rectification (`src/states.py`)
+- **Tab 2 (Ordnance Cards):**
+  - Switch card titles from `title_font` (40px) to `card_title_font` (26px).
+  - Shrink card height from `440px` to `400px` (or expand width from `360px` to `380px`), creating 40px of comfortable vertical margin.
+  - Eliminate overlap between multi-line weapon descriptions and the Equip/Unlock button.
+- **Tab 1 (Tech Tree Tracks):**
+  - Fix the **critical coordinate drift bug**: synchronize row container step and button step to exactly `105px` (`row_y = 105 + i * 105`, `btn_y = 105 + i * 105 + 25`).
+  - Integrate `draw_wrapped_text` for upgrade descriptions so future text expansions cannot collide with the purchase button.
+- **Tab 0 (Livery & Chassis Bay):**
+  - Remove/reposition the background structural greeble beam at `y=480` that clips beneath the Hull Unlock button.
+
+#### 2. OptionsState Controls Card Overhaul (`src/states.py`)
+- Replace the raw 3-line string dump that overflows by **166px** with a structured **2-Column Controls Matrix**:
+  - Left Column (Width: 300px): Keyboard Controls (Flight, Cannons, Missiles, Pause).
+  - Right Column (Width: 300px): Gamepad Controls (Left Stick, A Button, RB, Start).
+  - Bottom Banner: Accessibility toggles hint.
+  - All text wrapped cleanly within the 640px card boundaries with zero spillover.
+
+#### 3. LoginState Form Spacing & Status Banner (`src/ui/login_state.py`)
+- Expand vertical spacing between text fields from 4px to **12px**:
+  - User field -> 12px gap -> Password label -> Password field -> 12px gap -> Confirm label.
+- Update Status Banner text renderer to auto-downscale font size or word-wrap messages longer than 480px, preventing long usernames and registration error messages from leaking out of the banner box.
+
+#### 4. InstructionsState 2x2 Grid Optimization (`src/states.py`)
+- Recalculate card geometry: `card_w = 570, card_h = 220`, `gap_y = 16`.
+- Shifts grid bottom up from 675px to 635px, leaving 85px of clean breathing room for footer navigation hints.
+- Protect card descriptions with auto-wrap and ellipsis clamping so lengthy text cannot spill below card bottoms.
+
+---
+
+### Phase 3: Viewport Hierarchy, HUD & Window De-Confliction (`src/ui/hud.py`, `src/states.py`, `src/ui/tooltip.py`)
+
+#### 1. Combat HUD Boss Nameplate De-Confliction (`src/ui/hud.py`)
+- **Fix the Boss Badge vs Overdrive Meter Collision:**
+  - Reposition the Boss HUD health bar and nameplate:
+    - Shift Boss Bar down to `boss_bar_y = 86` (or anchor it cleanly with a 14px buffer below the player's Overdrive bar).
+    - Compact the center dashboard energy meters (`bar_h = 10`, vertical gap = 4px).
+    - Ensure the player's Overdrive charge percentage and `READY [F]` indicators remain 100% visible and unobstructed throughout all boss fights.
+
+#### 2. LevelSelectState Smart Tooltip Anchor (`src/states.py`, `src/ui/tooltip.py`)
+- **Fix Tooltip Covering Row 1 Cards:**
+  - For Row 0 level cards (`level 1-5`), anchor tooltips to the **side or top** (`rect.centerx, rect.top - 8`) or right-side Mission Intel Panel instead of projecting downwards over Row 1 cards.
+  - Alternatively, implement a dedicated **Right-Hand Sector Briefing Panel** that updates smoothly on hover, eliminating floating overlays altogether.
+- Add title text wrapping to `UITooltipManager` so long sector titles cannot inflate tooltip cards off-screen.
+
+#### 3. HighScoresState Leaderboard Table Containment (`src/states.py`)
+- Set explicit column widths with `fit_text_to_width()` on Pilot Callsigns (max 180px).
+- Add 15px minimum margin between callsign and total score, guaranteeing that 20-character pilot names never collide with 7-digit high scores.
+
+#### 4. LevelCompleteState Glassmorphic Debriefing Card (`src/states.py`)
+- Replace the unboxed raw text with a structured **Mission Debriefing Glass Card** (600×420px):
+  - Card Header: Level Sector cleared + Star Rating Banner.
+  - Combat Performance Breakdown: Enemies neutralized, accuracy, lives preserved.
+  - Currency Harvest Breakdown: Base mission credits + Star bonus multiplier + EMP crystal salvage.
+  - Interactive Continue button integrated into the base of the debriefing card.
+
+---
+
+### Verification Plan & Test Strategy
+
+#### Automated Unit & Integration Tests (`tests/test_sprint16_ui_ux.py`)
+- `test_text_wrapping_and_containment` — Verifies `draw_wrapped_text` wraps lines within specified widths and clips overflow.
+- `test_fit_text_to_width_truncation` — Validates ellipsis truncation when strings exceed column bounds.
+- `test_hangar_tech_tree_button_alignment` — Confirms buy buttons match row container y-coordinates for all 5 tiers (0px drift).
+- `test_hangar_ordnance_title_dimensions` — Confirms "CLUSTER BOMB POD" fits within card width without overflow.
+- `test_options_controls_card_containment` — Verifies all control matrix text lines render <= 600px usable width.
+- `test_hud_boss_overdrive_non_overlapping` — Asserts bounding box of Boss HUD elements does not intersect Overdrive HUD gauge.
+- `test_level_select_tooltip_bounds` — Verifies tooltips do not occlude clickable level selection rects.
+- `test_login_field_spacing` — Confirms minimum 10px vertical clearance between all text inputs and labels.
+
+#### Project-Wide Test Suite
+- Run all 90+ tests to confirm zero regressions in gameplay, persistence, or UI states.
+
 
 
 
